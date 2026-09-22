@@ -4,8 +4,8 @@ A single-page web app your techs open on a phone, fill out in the field, and sub
 photos go straight into Supabase. Static files only, so GitHub Pages can host it for free.
 
 - **Supabase project:** `58 Point Pool Exam` (`jlelvhhypwwkrkjxyewc`) — already set up.
-- **Files:** `index.html` (the whole app), `config.js` (connection settings), `supabase/schema.sql`
-  (a copy of what's already applied, so you can rebuild it anywhere).
+- **Files:** `index.html` (the inspection app), `pool-review.js` (the Pool Review tab), `config.js`
+  (connection settings), `supabase/pool_review.sql` (tables for the Pool Review tab).
 
 ## Where data goes
 
@@ -77,3 +77,33 @@ create accounts. Turn it back on briefly if you'd rather have techs self-registe
   since each row stores its own item names.
 - Free-tier Supabase includes 1 GB of storage. A busy season of photo-heavy inspections will pass
   that — watch **Reports → Storage** and upgrade when it gets close.
+
+## Pool Review tab
+
+The third tab reviews a client's property list before a bid (first list: NRP Group, 47 properties,
+due October 2, 2026). For each property it shows:
+
+- **58-point exam results**, pulled from `inspections`. A property links automatically to the newest
+  inspection whose Property Name (or Customer) matches the property's name; pick a different one
+  from the "Inspection on file" menu if the match is wrong. Section scores, chemistry readings,
+  notes, a "Needs attention" list of failed/caution items, and the inspection's photos all come
+  straight from what the tech submitted.
+- **Category 0–5** and **Inspection Result** (Fail / At risk / Pass), set by the reviewer.
+- **Poolbrain link** next to the property name.
+- **Service pricing**: April–October 3x/week and November–March 2x/week monthly prices; yearly is
+  7 × the 3x price + 5 × the 2x price.
+- **Summary** and **Repairs / Renovations / Maintenance needed** boxes.
+- **Photos**: drag and drop (or Choose photos) to add any number at once, filed by category.
+
+Everything saves automatically and shows up live for anyone else who has the tab open.
+
+| What | Where |
+|---|---|
+| The property list | `public.pool_review_properties` (edit or add rows in the Supabase table editor) |
+| Category, result, pricing, notes, Poolbrain link | `public.pool_reviews`, one row per property |
+| Review photo records | `public.pool_review_photos` |
+| Review photo files | bucket `inspection-photos`, under `reviews/<property_id>/<category>/` |
+
+To add another client's list later, insert rows into `pool_review_properties` with a different
+`client` value and a unique `id`. Any signed-in staff member can edit reviews and delete review
+photos; inspection photos stay owner-only as before.

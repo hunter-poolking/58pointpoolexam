@@ -221,6 +221,122 @@
   .overlay .track { height: 8px; border-radius: 6px; background: var(--bg); overflow: hidden; border: 1px solid var(--border); margin-top: 14px; }
   .overlay .fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.2s ease; }
 
+  /* ---- pool review ---- */
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .status-pill.na { background: var(--na-bg); color: var(--na); }
+  .rv-stats { display: flex; flex-wrap: wrap; gap: 8px 26px; margin: 2px 0 14px; }
+  .rv-stat b { display: block; font-size: 19px; }
+  .rv-stat span { font-size: 12px; color: var(--muted); }
+  .rv-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .rv-filters select { padding: 8px 10px; font-size: 13.5px; }
+  @media (max-width: 640px) { .rv-filters { grid-template-columns: 1fr 1fr; } }
+  .rv-group { font-size: 12.5px; font-weight: 700; color: var(--muted); margin: 16px 0 8px; display: flex; justify-content: space-between; }
+  .rv-group:first-child { margin-top: 0; }
+  .rv-group span { font-weight: 500; }
+  .rv-entry { display: grid; grid-template-columns: 6px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px 12px 0; overflow: hidden; }
+  .rv-entry:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .rv-strip { align-self: stretch; border-radius: 0 3px 3px 0; margin: -12px 0; }
+  .rv-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .rv-tags:empty { display: none; }
+  .rv-catpill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 20px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
+  .rv-catpill i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+  .rv-entry-right { text-align: right; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .rv-entry-right b { display: block; color: var(--text); font-size: 14px; }
+  .rv-head { display: flex; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap; align-items: flex-start; }
+  .rv-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .card h2.rv-name { font-size: 22px; border: none; padding: 0; margin: 0; display: block; }
+  .rv-addr { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .rv-saved { font-size: 12px; color: var(--muted); }
+  .rv-pb { display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: 20px; padding: 5px 12px 5px 10px; font-size: 13px; font-weight: 700; text-decoration: none; line-height: 1.2; cursor: pointer; }
+  .rv-pb:hover { background: var(--accent-dark); }
+  .rv-pb.add { background: transparent; color: var(--accent); border-style: dashed; font-weight: 600; }
+  .rv-pb.add:hover { background: transparent; color: var(--accent-dark); }
+  .rv-lnk { background: none; border: none; color: var(--accent); font-size: 12.5px; font-weight: 600; padding: 2px 4px; cursor: pointer; }
+  .rv-lnk.danger { color: var(--failed); }
+  .rv-sm { padding: 8px 14px; font-size: 13px; }
+  .rv-pb-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+  .rv-pb-edit input { flex: 1 1 260px; max-width: 460px; padding: 8px 10px; font-size: 14px; }
+  .rv-msg { font-size: 12.5px; color: var(--muted); }
+  .rv-msg.err { color: var(--failed); }
+  .rv-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px 18px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 14px; }
+  .rv-facts span { display: block; font-size: 12px; color: var(--muted); }
+  .rv-facts a { color: var(--accent); word-break: break-all; }
+  .rv-cat { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .rv-cat button { background: var(--bg); border: 2px solid transparent; border-radius: 10px; padding: 10px 4px 8px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; color: var(--muted); line-height: 1.2; text-align: center; }
+  .rv-cat button i { display: block; width: 100%; max-width: 52px; height: 12px; border-radius: 4px; }
+  .rv-cat button b { font-size: 17px; color: var(--text); }
+  .rv-cat button[aria-pressed="true"] { border-color: var(--text); background: var(--card); }
+  @media (max-width: 560px) { .rv-cat { grid-template-columns: repeat(3, 1fr); } }
+  .rv-res { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .rv-res button { background: var(--bg); border: 2px solid transparent; border-radius: 10px; padding: 11px 6px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--text); }
+  .rv-res button i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .rv-res [data-res="fail"] i { background: var(--failed); } .rv-res [data-res="at_risk"] i { background: var(--caution); } .rv-res [data-res="pass"] i { background: var(--pass); }
+  .rv-res [data-res="fail"][aria-pressed="true"] { border-color: var(--failed); background: var(--failed-bg); color: var(--failed); }
+  .rv-res [data-res="at_risk"][aria-pressed="true"] { border-color: var(--caution); background: var(--caution-bg); color: var(--caution); }
+  .rv-res [data-res="pass"][aria-pressed="true"] { border-color: var(--pass); background: var(--pass-bg); color: var(--pass); }
+  .rv-help { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+  .rv-empty { border: 1px dashed var(--border); border-radius: 10px; padding: 14px; color: var(--muted); font-size: 14px; margin-top: 12px; }
+  .rv-overall { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin: 16px 0 12px; }
+  .rv-big { font-size: 32px; font-weight: 800; line-height: 1; }
+  .rv-big small { font-size: 15px; font-weight: 600; color: var(--muted); }
+  .rv-counts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .rv-attn { background: var(--bg); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .rv-attn ul { list-style: none; margin: 0; padding: 0; }
+  .rv-attn li { font-size: 14px; padding: 4px 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rv-attn li small { color: var(--muted); }
+  .rv-secs { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  details.rv-sec { border-bottom: 1px solid var(--border); }
+  details.rv-sec:last-child { border-bottom: none; }
+  details.rv-sec summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr 130px 100px 14px; gap: 12px; align-items: center; padding: 11px 14px; }
+  details.rv-sec summary::-webkit-details-marker { display: none; }
+  details.rv-sec summary .t { font-weight: 600; font-size: 14.5px; }
+  details.rv-sec summary small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+  details.rv-sec summary .sc { text-align: right; font-weight: 700; }
+  details.rv-sec summary .chev { color: var(--muted); transition: transform .15s; }
+  details.rv-sec[open] summary .chev { transform: rotate(90deg); }
+  .rv-meter { display: flex; height: 7px; border-radius: 4px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); }
+  .rv-meter i { display: block; height: 100%; }
+  .rv-items { padding: 4px 14px 12px; background: var(--bg); }
+  .rv-items .drval { display: inline-flex; align-items: center; gap: 8px; }
+  .rv-val { color: var(--text); font-variant-numeric: tabular-nums; }
+  .rv-note { font-size: 13px; color: var(--muted); white-space: pre-wrap; margin: 10px 0 0; }
+  @media (max-width: 560px) { details.rv-sec summary { grid-template-columns: 1fr 90px 14px; } details.rv-sec summary .rv-meter { display: none; } }
+  .rv-drop { border: 2px dashed var(--border); border-radius: 12px; padding: 20px 14px; text-align: center; background: var(--bg); transition: border-color .12s, background .12s; }
+  .rv-drop.over { border-color: var(--accent); background: var(--pass-bg); }
+  .rv-drop-row { margin-top: 8px; display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .rv-drop-row select { width: auto; padding: 6px 8px; font-size: 13px; }
+  .rv-pgroup { margin-top: 14px; }
+  .rv-pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .rv-tile { margin: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--card); display: flex; flex-direction: column; }
+  .rv-thumb { display: block; width: 100%; aspect-ratio: 4/3; padding: 0; border: 0; border-radius: 0; background: var(--bg); position: relative; overflow: hidden; cursor: zoom-in; }
+  .rv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rv-ov { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10,25,35,.55); color: #fff; font-size: 12.5px; font-weight: 600; padding: 8px; text-align: center; }
+  .rv-ov.err { background: rgba(120,20,20,.75); }
+  .rv-meta { padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+  .rv-meta input, .rv-meta select { padding: 5px 7px; font-size: 12px; }
+  .rv-meta-ro { font-size: 12px; color: var(--muted); }
+  .rv-acts { display: flex; justify-content: flex-end; gap: 4px; }
+  .rv-price-wrap { overflow-x: auto; }
+  table.rv-price { width: 100%; border-collapse: collapse; min-width: 440px; }
+  table.rv-price th { background: #16294a; color: #fff; font-size: 13.5px; font-weight: 600; padding: 10px 12px; text-align: center; }
+  table.rv-price th:first-child, table.rv-price td:first-child { text-align: left; }
+  table.rv-price td { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 14px; text-align: center; }
+  table.rv-price tbody tr:nth-child(odd) td { background: var(--bg); }
+  table.rv-price tfoot td { font-weight: 700; border-bottom: none; padding-top: 12px; }
+  table.rv-price tfoot td:last-child { font-size: 19px; }
+  .rv-money { display: inline-flex; align-items: center; gap: 4px; }
+  .rv-money input { width: 110px; text-align: right; padding: 7px 9px; }
+  .rv-needs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 700px) { .rv-needs { grid-template-columns: 1fr; } }
+  .rv-lb { position: fixed; inset: 0; z-index: 120; background: rgba(6,12,16,.92); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .rv-lb img { max-width: 100%; max-height: calc(100% - 70px); object-fit: contain; border-radius: 4px; }
+  .rv-lb .cap { color: #e9f0f3; margin-top: 12px; font-size: 14px; text-align: center; }
+  .rv-lb .cap small { display: block; color: #9fb0b8; }
+  .rv-lb button { position: absolute; width: 44px; height: 44px; padding: 0; border-radius: 50%; background: rgba(255,255,255,.14); color: #fff; font-size: 22px; }
+  .rv-lb .x { top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; }
+  .rv-lb .pv { left: 12px; top: 50%; transform: translateY(-50%); }
+  .rv-lb .nx { right: 12px; top: 50%; transform: translateY(-50%); }
+
   @media print {
     .progress-bar, .actions, button, .tabs, .userbar { display: none !important; }
     body { background: white; }
@@ -265,13 +381,14 @@
 
   <div class="userbar">
     <span id="whoami"></span>
-    <span style="opacity:0.7;">· build 2</span>
+    <span style="opacity:0.7;">· build 3</span>
     <button type="button" id="signOutBtn">Sign out</button>
   </div>
 
   <div class="tabs">
     <button type="button" class="tab active" id="tabNew">New Inspection</button>
     <button type="button" class="tab" id="tabLog">Inspection Log</button>
+    <button type="button" class="tab" id="tabReview">Pool Review</button>
   </div>
 
   <div id="viewNew">
@@ -418,6 +535,45 @@
       <div id="logDetailContent"></div>
     </div>
   </div>
+
+  <div id="viewReview" class="hidden">
+    <p class="sync-note" id="rvSync"></p>
+    <div class="card" id="rvListCard">
+      <div class="log-toolbar">
+        <h2 style="border:none;padding:0;margin:0;" id="rvTitle">Pool Review</h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <input type="text" id="rvSearch" placeholder="Search property, city, manager..." aria-label="Search properties">
+          <button type="button" class="secondary rv-sm" id="rvRefresh">Refresh</button>
+          <button type="button" class="secondary rv-sm" id="rvExport">Export CSV</button>
+        </div>
+      </div>
+      <div class="rv-stats" id="rvStats"></div>
+      <div class="rv-filters">
+        <select id="rvRegion" aria-label="Filter by region"><option value="">All regions</option></select>
+        <select id="rvResF" aria-label="Filter by inspection result">
+          <option value="">All results</option><option value="fail">Fail</option><option value="at_risk">At risk</option><option value="pass">Pass</option><option value="none">No result yet</option>
+        </select>
+        <select id="rvCatF" aria-label="Filter by category">
+          <option value="">All categories</option><option value="none">No category yet</option>
+          <option value="0">0: Needs major work</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5: Good for service</option>
+        </select>
+        <select id="rvSort" aria-label="Sort">
+          <option value="order">Sort: route order</option><option value="name">Sort: name</option>
+          <option value="cat">Sort: category, low first</option><option value="score">Sort: exam score, low first</option><option value="year">Sort: yearly price, high first</option>
+        </select>
+      </div>
+      <div id="rvList"><div class="log-empty">Loading…</div></div>
+    </div>
+    <div id="rvDetail" class="hidden"></div>
+  </div>
+</div>
+
+<div id="rvLb" class="rv-lb hidden" role="dialog" aria-modal="true" aria-label="Photo viewer">
+  <img id="rvLbImg" alt="">
+  <div class="cap" id="rvLbCap"></div>
+  <button type="button" class="x" id="rvLbClose" aria-label="Close">×</button>
+  <button type="button" class="pv" id="rvLbPrev" aria-label="Previous photo">‹</button>
+  <button type="button" class="nx" id="rvLbNext" aria-label="Next photo">›</button>
 </div>
 
 <div id="uploadOverlay" class="overlay hidden">
@@ -905,6 +1061,7 @@
     $('draftLine').textContent = '';
 
     logLoaded = false;
+    window.dispatchEvent(new CustomEvent('poolie:inspection-saved', { detail: { id } }));
     if (confirm('Inspection saved. Start a new blank inspection?')) resetForm();
   });
 
@@ -933,16 +1090,26 @@
   let logCache = [];
   let logLoaded = false;
 
-  $('tabNew').addEventListener('click', () => {
-    $('tabNew').classList.add('active'); $('tabLog').classList.remove('active');
-    $('viewNew').classList.remove('hidden'); $('viewLog').classList.add('hidden');
-  });
+  function showTab(name) {
+    ['New', 'Log', 'Review'].forEach(t => {
+      const tab = $('tab' + t), view = $('view' + t);
+      if (tab) tab.classList.toggle('active', t === name);
+      if (view) view.classList.toggle('hidden', t !== name);
+    });
+  }
+  $('tabNew').addEventListener('click', () => showTab('New'));
   $('tabLog').addEventListener('click', () => {
-    $('tabLog').classList.add('active'); $('tabNew').classList.remove('active');
-    $('viewLog').classList.remove('hidden'); $('viewNew').classList.add('hidden');
+    showTab('Log');
     $('logDetailCard').classList.add('hidden'); $('logListCard').classList.remove('hidden');
     if (!logLoaded) loadLog();
   });
+  // used by the Pool Review tab's "Open the full inspection" link
+  async function openInspection(id) {
+    showTab('Log');
+    if (!logLoaded) await loadLog();
+    const entry = logCache.find(e => e.id === id);
+    if (entry) { showLogDetail(entry); window.scrollTo(0, 0); }
+  }
   $('refreshLogBtn').addEventListener('click', () => { logLoaded = false; loadLog(); });
   $('logSearch').addEventListener('input', (e) => renderLogList(e.target.value));
 
@@ -1106,6 +1273,12 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   });
 
+  // ---------------------------------------------------------------- shared with pool-review.js
+  window.POOLIE = {
+    sb, BUCKET, $, escapeHtml, prepareImage, safeName, showTab, openInspection,
+    chemistry, surface, equipment, safety, commercial, surrounding, PHOTO_CATEGORIES, TOTAL_POINTS,
+  };
+
   // ---------------------------------------------------------------- auth flow
   function showAuth(msg) {
     $('appView').classList.add('hidden');
@@ -1147,6 +1320,7 @@
 
   $('signOutBtn').addEventListener('click', async () => {
     await sb.auth.signOut();
+    window.dispatchEvent(new Event('poolie:signed-out'));
     showAuth('Signed out.');
   });
 
@@ -1159,5 +1333,6 @@
   })();
 })();
 </script>
+<script src="./pool-review.js"></script>
 </body>
 </html>
