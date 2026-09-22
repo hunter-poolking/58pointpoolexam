@@ -109,7 +109,8 @@
   .rating-group input[value="failed"]:checked + label { background: var(--failed-bg); border-color: var(--failed); color: var(--failed); }
   .rating-group input[value="na"]:checked + label { background: var(--na-bg); border-color: var(--na); color: var(--na); }
   .rating-group input[value="yes"]:checked + label,
-  .rating-group input[value="no"]:checked + label { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .rating-group input[value="no"]:checked + label,
+  .rating-group label.sel-yesno { background: var(--accent); border-color: var(--accent); color: #fff; }
   .rating-group label:hover { border-color: var(--accent); color: var(--accent); }
   .rating-group input:checked + label:hover { color: inherit; }
   .rating-group input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -264,6 +265,7 @@
 
   <div class="userbar">
     <span id="whoami"></span>
+    <span style="opacity:0.7;">· build 2</span>
     <button type="button" id="signOutBtn">Sign out</button>
   </div>
 
@@ -656,6 +658,16 @@
   }
   form.addEventListener('change', updateProgress);
   updateProgress();
+
+  // Keep Yes/No highlighting correct even if the :checked + label rule is unavailable
+  form.addEventListener('change', (e) => {
+    const t = e.target;
+    if (!t || t.type !== 'radio' || (t.value !== 'yes' && t.value !== 'no')) return;
+    form.querySelectorAll(`input[name="${t.name}"]`).forEach(r => {
+      const lab = form.querySelector(`label[for="${r.id}"]`);
+      if (lab) lab.classList.toggle('sel-yesno', r.checked);
+    });
+  });
 
   // ---------------------------------------------------------------- draft autosave
   const DRAFT_KEY = 'poolie_inspection_draft_v1';
