@@ -97,7 +97,7 @@
   .item .item-name .num { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 20px; }
   .item .value-input { width: 110px; padding: 7px 9px; font-size: 13.5px; }
 
-  .rating-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .rating-group { display: flex; gap: 6px; flex-wrap: wrap; position: relative; }
   .rating-group input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
   .rating-group label {
     cursor: pointer; font-size: 12px; font-weight: 600; padding: 7px 11px;
@@ -108,6 +108,11 @@
   .rating-group input[value="caution"]:checked + label { background: var(--caution-bg); border-color: var(--caution); color: var(--caution); }
   .rating-group input[value="failed"]:checked + label { background: var(--failed-bg); border-color: var(--failed); color: var(--failed); }
   .rating-group input[value="na"]:checked + label { background: var(--na-bg); border-color: var(--na); color: var(--na); }
+  .rating-group input[value="yes"]:checked + label,
+  .rating-group input[value="no"]:checked + label { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .rating-group label:hover { border-color: var(--accent); color: var(--accent); }
+  .rating-group input:checked + label:hover { color: inherit; }
+  .rating-group input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
   .yesno .item-name { flex: 1 1 260px; }
   .yesno .rating-group label { min-width: 54px; text-align: center; }
 
