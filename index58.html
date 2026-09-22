@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Poolie · 58-Point Pool Health Inspection</title>
+<style>
+  :root {
+    --bg: #f6f8f9;
+    --card: #ffffff;
+    --border: #dfe5e8;
+    --text: #16232b;
+    --muted: #5c6b73;
+    --accent: #0f7ea3;
+    --accent-dark: #0b5f7a;
+    --pass: #1e8e5a;
+    --pass-bg: #e5f6ee;
+    --caution: #b8860b;
+    --caution-bg: #fdf3dc;
+    --failed: #c0392b;
+    --failed-bg: #fce8e6;
+    --na: #6b7680;
+    --na-bg: #eceff1;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10171b; --card: #182228; --border: #2a373f; --text: #eef3f5; --muted: #9fb0b8;
+      --pass-bg: #123526; --caution-bg: #3a2f0c; --failed-bg: #3a1613; --na-bg: #232d33;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10171b; --card: #182228; --border: #2a373f; --text: #eef3f5; --muted: #9fb0b8;
+    --pass-bg: #123526; --caution-bg: #3a2f0c; --failed-bg: #3a1613; --na-bg: #232d33;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 18px 80px; }
+  header.top { text-align: center; margin-bottom: 18px; }
+  header.top .brand {
+    font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.top h1 { margin: 6px 0 4px; font-size: 26px; }
+  header.top p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .userbar {
+    display: flex; justify-content: center; align-items: center; gap: 10px;
+    font-size: 12.5px; color: var(--muted); margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .userbar button {
+    background: none; border: none; color: var(--accent);
+    font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0;
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px; margin-bottom: 18px;
+  }
+  .card h2 {
+    font-size: 16px; margin: 0 0 14px; padding-bottom: 10px;
+    border-bottom: 2px solid var(--accent);
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  }
+  .card h2 .count { font-size: 12px; font-weight: 500; color: var(--muted); }
+
+  .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 560px) { .field-grid { grid-template-columns: 1fr; } }
+
+  label.field-label {
+    display: block; font-size: 12.5px; font-weight: 600;
+    color: var(--muted); margin-bottom: 5px;
+  }
+  input[type="text"], input[type="date"], input[type="email"], input[type="password"], textarea, select {
+    width: 100%; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font-size: 14.5px; font-family: inherit;
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .item {
+    padding: 13px 0; border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+  }
+  .item:last-child { border-bottom: none; }
+  .item .item-name { flex: 1 1 220px; font-size: 14.5px; display: flex; gap: 8px; }
+  .item .item-name .num { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 20px; }
+  .item .value-input { width: 110px; padding: 7px 9px; font-size: 13.5px; }
+
+  .rating-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .rating-group input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+  .rating-group label {
+    cursor: pointer; font-size: 12px; font-weight: 600; padding: 7px 11px;
+    border-radius: 20px; border: 1px solid var(--border); color: var(--muted);
+    background: var(--bg); user-select: none; transition: all 0.12s ease; white-space: nowrap;
+  }
+  .rating-group input[value="pass"]:checked + label { background: var(--pass-bg); border-color: var(--pass); color: var(--pass); }
+  .rating-group input[value="caution"]:checked + label { background: var(--caution-bg); border-color: var(--caution); color: var(--caution); }
+  .rating-group input[value="failed"]:checked + label { background: var(--failed-bg); border-color: var(--failed); color: var(--failed); }
+  .rating-group input[value="na"]:checked + label { background: var(--na-bg); border-color: var(--na); color: var(--na); }
+  .yesno .item-name { flex: 1 1 260px; }
+  .yesno .rating-group label { min-width: 54px; text-align: center; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .swatch.pass { background: var(--pass); }
+  .swatch.caution { background: var(--caution); }
+  .swatch.failed { background: var(--failed); }
+  .swatch.na { background: var(--na); }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 18px;
+    display: flex; align-items: center; gap: 12px; font-size: 13px;
+  }
+  .progress-track { flex: 1; height: 8px; border-radius: 6px; background: var(--bg); overflow: hidden; border: 1px solid var(--border); }
+  .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.2s ease; }
+
+  .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+  button { font-family: inherit; font-size: 14.5px; font-weight: 600; padding: 12px 22px; border-radius: 10px; border: none; cursor: pointer; }
+  button.primary { background: var(--accent); color: white; }
+  button.primary:hover { background: var(--accent-dark); }
+  button.primary:disabled { opacity: 0.6; cursor: default; }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button.danger { background: transparent; color: var(--failed); border: 1px solid var(--failed); }
+
+  .result-banner {
+    display: none; text-align: center; padding: 18px; border-radius: 12px;
+    background: var(--pass-bg); color: var(--pass); font-weight: 700; margin-bottom: 16px;
+  }
+  .result-banner.show { display: block; }
+  .summary-line { font-size: 13px; color: var(--muted); margin-top: 4px; text-align: center; }
+
+  .tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; }
+  .tabs button.tab {
+    background: var(--card); border: 1px solid var(--border); color: var(--muted);
+    padding: 9px 18px; border-radius: 20px; font-size: 13.5px;
+  }
+  .tabs button.tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .hidden { display: none !important; }
+
+  /* ---- photos ---- */
+  .photo-block { padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .photo-block:last-child { border-bottom: none; }
+  .photo-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .photo-title { font-size: 14.5px; display: flex; gap: 8px; }
+  .photo-title .num { color: var(--muted); min-width: 20px; }
+  .photo-count-pill { font-size: 11.5px; color: var(--muted); }
+  .add-photo-btn {
+    font-size: 12.5px; padding: 8px 14px; border-radius: 20px;
+    border: 1px dashed var(--accent); background: transparent; color: var(--accent);
+  }
+  .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+  .thumb { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg); position: relative; }
+  .thumb img { width: 100%; height: 96px; object-fit: cover; display: block; }
+  .thumb .cap { width: 100%; border: none; border-top: 1px solid var(--border); border-radius: 0; padding: 6px 8px; font-size: 11.5px; background: var(--card); }
+  .thumb .rm {
+    position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; line-height: 1;
+    padding: 0; border-radius: 50%; background: rgba(0,0,0,0.6); color: #fff; font-size: 14px;
+  }
+  .thumb .sz { position: absolute; bottom: 34px; left: 5px; font-size: 10px; background: rgba(0,0,0,0.55); color: #fff; padding: 2px 5px; border-radius: 4px; }
+
+  /* ---- log ---- */
+  .log-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
+  .log-toolbar input[type="text"] { max-width: 260px; }
+  .log-empty { color: var(--muted); font-size: 14px; text-align: center; padding: 30px 0; }
+  .log-entry { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; }
+  .log-entry:hover { border-color: var(--accent); }
+  .log-entry-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .log-entry-title { font-weight: 700; font-size: 14.5px; }
+  .log-entry-sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .status-pill { font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+  .status-pill.ok { background: var(--pass-bg); color: var(--pass); }
+  .status-pill.caution { background: var(--caution-bg); color: var(--caution); }
+  .status-pill.failed { background: var(--failed-bg); color: var(--failed); }
+  .log-detail-back { background: none; border: none; color: var(--accent); padding: 0; font-weight: 600; margin-bottom: 14px; cursor: pointer; }
+  .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; gap: 12px; }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-row .drname { color: var(--text); }
+  .detail-row .drval { color: var(--muted); text-align: right; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin: 10px 0 6px; }
+  .gallery a { display: block; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; text-decoration: none; }
+  .gallery img { width: 100%; height: 110px; object-fit: cover; display: block; }
+  .gallery .gcap { font-size: 11px; color: var(--muted); padding: 5px 7px; }
+  .sync-note { text-align: center; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  .section-notes-label { margin-top: 16px; }
+  .folder-path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); word-break: break-all; }
+
+  /* ---- auth ---- */
+  .auth-wrap { max-width: 400px; margin: 60px auto; padding: 0 18px; }
+  .auth-wrap .card { padding: 26px; }
+  .auth-error { color: var(--failed); font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .auth-ok { color: var(--pass); font-size: 13px; margin-top: 10px; }
+
+  /* ---- upload overlay ---- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .overlay .box { background: var(--card); border-radius: 14px; padding: 24px 28px; max-width: 340px; width: 100%; text-align: center; }
+  .overlay .box h3 { margin: 0 0 10px; font-size: 16px; }
+  .overlay .box p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .overlay .track { height: 8px; border-radius: 6px; background: var(--bg); overflow: hidden; border: 1px solid var(--border); margin-top: 14px; }
+  .overlay .fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.2s ease; }
+
+  @media print {
+    .progress-bar, .actions, button, .tabs, .userbar { display: none !important; }
+    body { background: white; }
+    .card { break-inside: avoid; border: 1px solid #ccc; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ SIGN IN ============ -->
+<div id="authView" class="auth-wrap hidden">
+  <header class="top">
+    <div class="brand">Poolie · Texas-Owned &amp; Operated Premier Pool Service</div>
+    <h1 style="font-size:22px;">Staff Sign In</h1>
+    <p>58-Point Pool Health Inspection</p>
+  </header>
+  <div class="card">
+    <label class="field-label" for="authEmail">Work email</label>
+    <input type="email" id="authEmail" autocomplete="username" placeholder="you@poolie.com">
+    <div style="height:12px"></div>
+    <label class="field-label" for="authPassword">Password</label>
+    <input type="password" id="authPassword" autocomplete="current-password" placeholder="••••••••">
+    <div style="height:16px"></div>
+    <button type="button" class="primary" id="signInBtn" style="width:100%;">Sign In</button>
+    <div style="height:8px"></div>
+    <button type="button" class="secondary" id="magicLinkBtn" style="width:100%;">Email me a sign-in link</button>
+    <div class="auth-error" id="authMsg"></div>
+    <p style="font-size:12px;color:var(--muted);margin:12px 0 0;text-align:center;">
+      No account? Ask your manager to add you in the Supabase dashboard.
+    </p>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="appView" class="wrap hidden">
+
+  <header class="top">
+    <div class="brand">Poolie · Texas-Owned &amp; Operated Premier Pool Service</div>
+    <h1 id="pageTitle">Pool Health Inspection</h1>
+    <p>service@poolie.com · (512) 293-7690</p>
+  </header>
+
+  <div class="userbar">
+    <span id="whoami"></span>
+    <button type="button" id="signOutBtn">Sign out</button>
+  </div>
+
+  <div class="tabs">
+    <button type="button" class="tab active" id="tabNew">New Inspection</button>
+    <button type="button" class="tab" id="tabLog">Inspection Log</button>
+  </div>
+
+  <div id="viewNew">
+    <div class="progress-bar">
+      <span id="progressLabel">0 / — rated</span>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <div class="result-banner" id="resultBanner"></div>
+
+    <form id="inspectionForm">
+      <div class="card">
+        <h2>Visit Details</h2>
+        <div class="field-grid">
+          <div>
+            <label class="field-label" for="f_date">Date</label>
+            <input type="date" id="f_date" name="date">
+          </div>
+          <div>
+            <label class="field-label" for="f_tech">Technician</label>
+            <input type="text" id="f_tech" name="technician" placeholder="Technician name">
+          </div>
+          <div>
+            <label class="field-label" for="f_customer">Customer's Name</label>
+            <input type="text" id="f_customer" name="customer" placeholder="Customer name">
+          </div>
+          <div>
+            <label class="field-label" for="f_property">Property Name</label>
+            <input type="text" id="f_property" name="property" placeholder="e.g. Sunset Ridge HOA, Bella Vista Apartments">
+          </div>
+          <div>
+            <label class="field-label" for="f_phone">Customer Phone (optional)</label>
+            <input type="text" id="f_phone" name="phone" placeholder="(___) ___-____">
+          </div>
+          <div>
+            <label class="field-label" for="f_address">Address</label>
+            <input type="text" id="f_address" name="address" placeholder="Street address">
+          </div>
+          <div>
+            <label class="field-label" for="f_city">City</label>
+            <input type="text" id="f_city" name="city" placeholder="City">
+          </div>
+          <div>
+            <label class="field-label" for="f_dimensions">Pool Dimensions (L x W x Depth)</label>
+            <input type="text" id="f_dimensions" name="dimensions" placeholder="e.g. 32ft x 16ft x 3-8ft">
+          </div>
+          <div>
+            <label class="field-label" for="f_size">Pool Size (gallons)</label>
+            <input type="text" id="f_size" name="size" placeholder="e.g. 18,000 gal">
+          </div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span><span class="swatch pass"></span> Checked &amp; OK (Pass)</span>
+        <span><span class="swatch caution"></span> Requires Attention Soon (Caution)</span>
+        <span><span class="swatch failed"></span> Requires Immediate Attention (Failed)</span>
+        <span><span class="swatch na"></span> N/A</span>
+      </div>
+
+      <div class="card">
+        <h2>Pool Water Chemistry <span class="count">10 points</span></h2>
+        <div id="section-chem"></div>
+        <label class="field-label section-notes-label" for="notes_chem">Section Notes</label>
+        <textarea id="notes_chem" name="notes_chem" placeholder="Notes about water chemistry..."></textarea>
+      </div>
+
+      <div class="card">
+        <h2>Pool Surface &amp; Decking (Visual Condition) <span class="count">11 points</span></h2>
+        <div id="section-surface"></div>
+        <label class="field-label section-notes-label" for="notes_surface">Section Notes</label>
+        <textarea id="notes_surface" name="notes_surface" placeholder="Notes about surface &amp; decking..."></textarea>
+      </div>
+
+      <div class="card">
+        <h2>Pool Equipment Inspection <span class="count">21 points</span></h2>
+        <div id="section-equipment"></div>
+        <label class="field-label section-notes-label" for="notes_equipment">Section Notes</label>
+        <textarea id="notes_equipment" name="notes_equipment" placeholder="Notes about equipment..."></textarea>
+      </div>
+
+      <div class="card">
+        <h2>Safety &amp; General Inspection <span class="count">9 points</span></h2>
+        <div id="section-safety"></div>
+        <label class="field-label section-notes-label" for="notes_safety">Section Notes</label>
+        <textarea id="notes_safety" name="notes_safety" placeholder="Notes about safety &amp; general items..."></textarea>
+      </div>
+
+      <div class="card">
+        <h2>Commercial Signs &amp; Safety Equipment <span class="count">7 points</span></h2>
+        <div id="section-commercial"></div>
+        <label class="field-label section-notes-label" for="notes_commercial">Section Notes</label>
+        <textarea id="notes_commercial" name="notes_commercial" placeholder="Notes about commercial signs &amp; safety equipment..."></textarea>
+      </div>
+
+      <div class="card">
+        <h2>Surrounding Pool Area</h2>
+        <div id="section-surrounding"></div>
+        <label class="field-label section-notes-label" for="notes_surrounding">Section Notes</label>
+        <textarea id="notes_surrounding" name="notes_surrounding" placeholder="Notes about the surrounding pool area..."></textarea>
+      </div>
+
+      <div class="card">
+        <h2>Inspection Photo Record <span class="count" id="photoTotalPill">0 photos attached</span></h2>
+        <p class="summary-line" style="margin:0 0 6px;text-align:left;">
+          Add as many photos as you need in each category — there is no limit. Photos are resized on the
+          phone before upload and filed in this inspection's own folder.
+        </p>
+        <div id="section-photos"></div>
+        <label class="field-label section-notes-label" for="notes_photos">Section Notes</label>
+        <textarea id="notes_photos" name="notes_photos" placeholder="Notes about photos..."></textarea>
+      </div>
+
+      <div class="card">
+        <h2>Overall / General Notes</h2>
+        <textarea id="f_notes" name="notes" placeholder="Additional notes, recommendations, or follow-up items..."></textarea>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="primary" id="submitBtn">Submit Inspection</button>
+        <button type="button" class="secondary" id="printBtn">Print / Save PDF</button>
+        <button type="button" class="secondary" id="resetBtn">Clear Form</button>
+      </div>
+      <p class="summary-line" id="statusLine"></p>
+      <p class="summary-line" id="draftLine"></p>
+    </form>
+  </div>
+
+  <div id="viewLog" class="hidden">
+    <p class="sync-note" id="dbStatusNote"></p>
+    <div class="card" id="logListCard">
+      <div class="log-toolbar">
+        <h2 style="border:none;padding:0;margin:0;">Logged Inspections</h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <input type="text" id="logSearch" placeholder="Search customer, property, or address...">
+          <button type="button" class="tab" id="refreshLogBtn">Refresh</button>
+          <button type="button" class="tab" id="exportCsvBtn">Export CSV</button>
+        </div>
+      </div>
+      <div id="logList"><div class="log-empty">Loading…</div></div>
+    </div>
+    <div class="card hidden" id="logDetailCard">
+      <button type="button" class="log-detail-back" id="logDetailBack">&larr; Back to log</button>
+      <div id="logDetailContent"></div>
+    </div>
+  </div>
+</div>
+
+<div id="uploadOverlay" class="overlay hidden">
+  <div class="box">
+    <h3 id="ovTitle">Submitting inspection…</h3>
+    <p id="ovMsg">Saving report</p>
+    <div class="track"><div class="fill" id="ovFill"></div></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="./config.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------------- setup
+  const cfg = window.POOLIE_CONFIG || {};
+  const BUCKET = cfg.bucket || 'inspection-photos';
+  const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {
+    auth: { persistSession: true, autoRefreshToken: true }
+  });
+
+  const $ = (id) => document.getElementById(id);
+  const escapeHtml = (s) => String(s == null ? '' : s)
+    .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // ---------------------------------------------------------------- checklist data
+  const RATINGS = [
+    { v: "pass", label: "Pass" },
+    { v: "caution", label: "Caution" },
+    { v: "failed", label: "Failed" },
+    { v: "na", label: "N/A" },
+  ];
+  const RATING_LABELS = { pass: 'Pass', caution: 'Caution', failed: 'Failed', na: 'N/A' };
+
+  const chemistry = [
+    { name: "Chlorine", hasValue: true },
+    { name: "pH", hasValue: true },
+    { name: "Alkalinity", hasValue: true },
+    { name: "Cyanuric Acid (CYA)", hasValue: true },
+    { name: "Calcium", hasValue: true },
+    { name: "Salt", hasValue: true },
+    { name: "Phosphates", hasValue: true },
+    { name: "TDS", hasValue: true },
+    { name: "Water Clarity (main drain clearly visible)", hasValue: false },
+    { name: "Algae", hasValue: false },
+  ];
+  const surface = [
+    "Pool plaster condition (Smooth/Even or Wearing)",
+    "Tile Condition (broken, missing, grout lines)",
+    "Pool coping condition",
+    "Mastic",
+    "Decking condition (cracks, damage, faded)",
+    "Skimmer - Flow and Structure",
+    "Main Drain VGBA Compliance",
+    "Automatic pool cleaner function",
+    "Ladders/Handrails (secure or loose)",
+    "Pool gate/latch condition (self-closing)",
+    "Pool cover condition (if applicable)",
+  ];
+  const equipment = [
+    "Pool automation system", "Pool pump condition", "Filter Pump Schedule", "Filter Pump Efficiency",
+    "Water feature pumps (if applicable)", "Booster Pump (if applicable)",
+    "Pool light operation and wiring condition", "Heater operation and efficiency", "Heater pump",
+    "Air blower for spa (if applicable)", "Pool/Spa Mode Operation", "UV", "Filter Size", "Filter age",
+    "Filter Pressure", "Chlorinator functionality", "Salt cell", "Valves", "Plumbing Leaks",
+    "Plumbing Efficiency (Efficient or Inefficient)", "Conduit/Wiring",
+  ];
+  const safety = [
+    "Bonding", "GFCI outlet functionality", "GFCI Breaker", "GFCI Outlet", "Low Voltage Lighting",
+    "VGBA Drain Covers", "Safety barriers/Gates latching", "SVRS present", "SVRS tested and functioning",
+  ];
+  const commercial = [
+    "USCG approved buoy", "Heaving line for Buoy", "Life hook with pole", "Depth markers",
+    "Pool Rule sign", "ADA Chair Lift", "SVRS",
+  ];
+  const surrounding = [
+    "Is the equipment pad clear of vegetation?",
+    "Is there vegetation surrounding the pool area?",
+    "Does the vegetation need to be trimmed?",
+  ];
+  const PHOTO_CATEGORIES = [
+    { key: "equipment_pad",  label: "Equipment pad detailed photos" },
+    { key: "full_pool",      label: "Full pool" },
+    { key: "entrance",       label: "Entrance to pool area" },
+    { key: "signs_markers",  label: "All safety signs and depth markers" },
+    { key: "access_area",    label: "Access area to pool and equipment room" },
+    { key: "additional",     label: "Additional photos (anything else worth recording)" },
+  ];
+
+  const TOTAL_POINTS = chemistry.length + surface.length + equipment.length + safety.length + commercial.length;
+  $('pageTitle').textContent = TOTAL_POINTS + '-Point Pool Health Inspection';
+
+  // ---------------------------------------------------------------- render checklist
+  function ratingGroup(id) {
+    let html = '<div class="rating-group">';
+    RATINGS.forEach(r => {
+      html += `<input type="radio" id="${id}_${r.v}" name="${id}" value="${r.v}">` +
+              `<label for="${id}_${r.v}">${r.label}</label>`;
+    });
+    return html + '</div>';
+  }
+  function renderChecklist(containerId, items, prefix, withValue) {
+    let html = '';
+    items.forEach((item, i) => {
+      const name = typeof item === 'string' ? item : item.name;
+      const hasValue = withValue && item.hasValue;
+      const id = `${prefix}_${i}`;
+      html += `<div class="item">
+        <div class="item-name"><span class="num">${i+1}.</span><span>${escapeHtml(name)}</span></div>
+        ${hasValue ? `<input type="text" class="value-input" placeholder="Value" id="${id}_val" name="${id}_val">` : ''}
+        ${ratingGroup(id)}
+      </div>`;
+    });
+    $(containerId).innerHTML = html;
+  }
+  function renderYesNo(containerId, items, prefix) {
+    let html = '';
+    items.forEach((q, i) => {
+      const id = `${prefix}_${i}`;
+      html += `<div class="item yesno">
+        <div class="item-name"><span class="num">${i+1}.</span><span>${escapeHtml(q)}</span></div>
+        <div class="rating-group">
+          <input type="radio" id="${id}_yes" name="${id}" value="yes"><label for="${id}_yes">Yes</label>
+          <input type="radio" id="${id}_no" name="${id}" value="no"><label for="${id}_no">No</label>
+        </div>
+      </div>`;
+    });
+    $(containerId).innerHTML = html;
+  }
+
+  renderChecklist('section-chem', chemistry, 'chem', true);
+  renderChecklist('section-surface', surface, 'surface', false);
+  renderChecklist('section-equipment', equipment, 'equip', false);
+  renderChecklist('section-safety', safety, 'safety', false);
+  renderChecklist('section-commercial', commercial, 'commercial', false);
+  renderYesNo('section-surrounding', surrounding, 'surround');
+
+  const form = $('inspectionForm');
+
+  // ---------------------------------------------------------------- photos (unlimited)
+  const photoStore = {};           // key -> [{ uid, file, url, caption }]
+  PHOTO_CATEGORIES.forEach(c => { photoStore[c.key] = []; });
+  let photoUid = 0;
+
+  function renderPhotoSections() {
+    let html = '';
+    PHOTO_CATEGORIES.forEach((cat, i) => {
+      html += `<div class="photo-block" data-key="${cat.key}">
+        <div class="photo-head">
+          <div class="photo-title"><span class="num">${i+1}.</span><span>${escapeHtml(cat.label)}</span></div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="photo-count-pill" id="cnt_${cat.key}">0 photos</span>
+            <button type="button" class="add-photo-btn" data-add="${cat.key}">+ Add photos</button>
+          </div>
+        </div>
+        <input type="file" accept="image/*" multiple class="hidden" id="file_${cat.key}">
+        <div class="thumbs" id="thumbs_${cat.key}"></div>
+      </div>`;
+    });
+    $('section-photos').innerHTML = html;
+
+    PHOTO_CATEGORIES.forEach(cat => {
+      $('file_' + cat.key).addEventListener('change', (e) => {
+        addFiles(cat.key, Array.from(e.target.files || []));
+        e.target.value = '';
+      });
+    });
+    $('section-photos').addEventListener('click', (e) => {
+      const addKey = e.target.getAttribute && e.target.getAttribute('data-add');
+      if (addKey) { $('file_' + addKey).click(); return; }
+      const rm = e.target.getAttribute && e.target.getAttribute('data-remove');
+      if (rm) {
+        const [key, uid] = rm.split('|');
+        const idx = photoStore[key].findIndex(p => String(p.uid) === uid);
+        if (idx > -1) { URL.revokeObjectURL(photoStore[key][idx].url); photoStore[key].splice(idx, 1); }
+        renderThumbs(key); updatePhotoTotals();
+      }
+    });
+  }
+
+  function addFiles(key, files) {
+    files.filter(f => f && f.size > 0).forEach(f => {
+      photoStore[key].push({ uid: ++photoUid, file: f, url: URL.createObjectURL(f), caption: '' });
+    });
+    renderThumbs(key);
+    updatePhotoTotals();
+  }
+
+  function renderThumbs(key) {
+    const el = $('thumbs_' + key);
+    el.innerHTML = photoStore[key].map(p => `
+      <div class="thumb">
+        <button type="button" class="rm" data-remove="${key}|${p.uid}" title="Remove">&times;</button>
+        <img src="${p.url}" alt="">
+        <span class="sz">${(p.file.size/1048576).toFixed(1)} MB</span>
+        <input type="text" class="cap" placeholder="Caption (optional)" value="${escapeHtml(p.caption)}"
+               data-cap="${key}|${p.uid}">
+      </div>`).join('');
+    el.querySelectorAll('[data-cap]').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const [k, uid] = e.target.getAttribute('data-cap').split('|');
+        const p = photoStore[k].find(x => String(x.uid) === uid);
+        if (p) p.caption = e.target.value;
+      });
+    });
+  }
+
+  function totalPhotos() {
+    return PHOTO_CATEGORIES.reduce((n, c) => n + photoStore[c.key].length, 0);
+  }
+  function updatePhotoTotals() {
+    PHOTO_CATEGORIES.forEach(c => {
+      const n = photoStore[c.key].length;
+      $('cnt_' + c.key).textContent = n === 1 ? '1 photo' : n + ' photos';
+    });
+    const t = totalPhotos();
+    $('photoTotalPill').textContent = t === 1 ? '1 photo attached' : t + ' photos attached';
+  }
+
+  renderPhotoSections();
+  updatePhotoTotals();
+
+  // ---------------------------------------------------------------- progress
+  const progressFill = $('progressFill');
+  const progressLabel = $('progressLabel');
+  const ratingNames = [
+    ...chemistry.map((_, i) => `chem_${i}`), ...surface.map((_, i) => `surface_${i}`),
+    ...equipment.map((_, i) => `equip_${i}`), ...safety.map((_, i) => `safety_${i}`),
+    ...commercial.map((_, i) => `commercial_${i}`)
+  ];
+  function updateProgress() {
+    let rated = 0;
+    ratingNames.forEach(n => { if (form.querySelector(`input[name="${n}"]:checked`)) rated++; });
+    progressFill.style.width = Math.round((rated / TOTAL_POINTS) * 100) + '%';
+    progressLabel.textContent = `${rated} / ${TOTAL_POINTS} rated`;
+  }
+  form.addEventListener('change', updateProgress);
+  updateProgress();
+
+  // ---------------------------------------------------------------- draft autosave
+  const DRAFT_KEY = 'poolie_inspection_draft_v1';
+  let draftTimer = null;
+
+  function collectDraft() {
+    const data = {};
+    form.querySelectorAll('input[type="text"], input[type="date"], textarea').forEach(el => {
+      if (el.id) data[el.id] = el.value;
+    });
+    form.querySelectorAll('input[type="radio"]:checked').forEach(el => { data['radio:' + el.name] = el.value; });
+    return data;
+  }
+  function saveDraft() {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ at: Date.now(), data: collectDraft() }));
+      $('draftLine').textContent = 'Draft saved on this device at ' + new Date().toLocaleTimeString() +
+        ' (photos are not part of the draft).';
+    } catch (e) { /* storage full or blocked — ignore */ }
+  }
+  function restoreDraft() {
+    let raw = null;
+    try { raw = localStorage.getItem(DRAFT_KEY); } catch (e) { return; }
+    if (!raw) return;
+    let parsed; try { parsed = JSON.parse(raw); } catch (e) { return; }
+    const d = parsed && parsed.data; if (!d) return;
+    Object.keys(d).forEach(k => {
+      if (k.indexOf('radio:') === 0) {
+        const el = form.querySelector(`input[name="${k.slice(6)}"][value="${d[k]}"]`);
+        if (el) el.checked = true;
+      } else {
+        const el = $(k); if (el) el.value = d[k];
+      }
+    });
+    updateProgress();
+    $('draftLine').textContent = 'Restored an unsent draft from ' + new Date(parsed.at).toLocaleString() + '.';
+  }
+  function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
+
+  form.addEventListener('input', () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 1200); });
+  form.addEventListener('change', () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 400); });
+
+  // ---------------------------------------------------------------- collect + submit
+  function collectItemResults(items, prefix, withValue) {
+    return items.map((item, i) => {
+      const name = typeof item === 'string' ? item : item.name;
+      const id = `${prefix}_${i}`;
+      const checked = form.querySelector(`input[name="${id}"]:checked`);
+      const valueEl = withValue ? $(`${id}_val`) : null;
+      const out = { name: name, rating: checked ? checked.value : null };
+      if (valueEl) out.value = valueEl.value || null;
+      return out;
+    });
+  }
+  function collectYesNo(items, prefix) {
+    return items.map((q, i) => {
+      const checked = form.querySelector(`input[name="${prefix}_${i}"]:checked`);
+      return { question: q, answer: checked ? checked.value : null };
+    });
+  }
+  function tally() {
+    const counts = { pass: 0, caution: 0, failed: 0, na: 0, unrated: 0 };
+    ratingNames.forEach(n => {
+      const checked = form.querySelector(`input[name="${n}"]:checked`);
+      if (checked) counts[checked.value]++; else counts.unrated++;
+    });
+    return counts;
+  }
+
+  function newUuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  // downscale big phone photos before upload; falls back to the original file
+  async function prepareImage(file) {
+    const MAX_DIM = 2200, QUALITY = 0.82;
+    if (!file.type || file.type.indexOf('image/') !== 0) return { blob: file, name: file.name, type: file.type };
+    if (file.size < 600 * 1024) return { blob: file, name: file.name, type: file.type };
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, MAX_DIM / Math.max(bmp.width, bmp.height));
+      if (scale === 1 && file.size < 3 * 1024 * 1024) return { blob: file, name: file.name, type: file.type };
+      const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+      bmp.close && bmp.close();
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', QUALITY));
+      if (!blob || blob.size >= file.size) return { blob: file, name: file.name, type: file.type };
+      const base = file.name.replace(/\.[^.]+$/, '') || 'photo';
+      return { blob: blob, name: base + '.jpg', type: 'image/jpeg' };
+    } catch (e) {
+      return { blob: file, name: file.name, type: file.type };
+    }
+  }
+
+  function safeName(name) {
+    return (name || 'photo.jpg').replace(/[^\w.\-]+/g, '_').slice(-60);
+  }
+
+  function showOverlay(title, msg, pct) {
+    $('uploadOverlay').classList.remove('hidden');
+    $('ovTitle').textContent = title;
+    $('ovMsg').textContent = msg;
+    $('ovFill').style.width = (pct || 0) + '%';
+  }
+  function hideOverlay() { $('uploadOverlay').classList.add('hidden'); }
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = $('submitBtn');
+    if (btn.disabled) return;
+
+    const { data: sessionData } = await sb.auth.getSession();
+    const session = sessionData && sessionData.session;
+    if (!session) { showAuth('Your session expired — please sign in again.'); return; }
+
+    const counts = tally();
+    const id = newUuid();
+    const folder = 'inspections/' + id;
+    const status = counts.failed > 0 ? 'failed' : (counts.caution > 0 ? 'caution' : 'pass');
+
+    const row = {
+      id: id,
+      submitted_by: session.user.id,
+      submitted_by_email: session.user.email,
+      inspection_date: $('f_date').value || null,
+      technician: $('f_tech').value || null,
+      customer: $('f_customer').value || null,
+      property: $('f_property').value || null,
+      phone: $('f_phone').value || null,
+      address: $('f_address').value || null,
+      city: $('f_city').value || null,
+      dimensions: $('f_dimensions').value || null,
+      pool_size: $('f_size').value || null,
+      notes: $('f_notes').value || null,
+      section_notes: {
+        chemistry: $('notes_chem').value || null,
+        surface: $('notes_surface').value || null,
+        equipment: $('notes_equipment').value || null,
+        safety: $('notes_safety').value || null,
+        commercial: $('notes_commercial').value || null,
+        surrounding: $('notes_surrounding').value || null,
+        photos: $('notes_photos').value || null,
+      },
+      chemistry: collectItemResults(chemistry, 'chem', true),
+      surface: collectItemResults(surface, 'surface', false),
+      equipment: collectItemResults(equipment, 'equip', false),
+      safety: collectItemResults(safety, 'safety', false),
+      commercial: collectItemResults(commercial, 'commercial', false),
+      surrounding: collectYesNo(surrounding, 'surround'),
+      pass_count: counts.pass, caution_count: counts.caution, failed_count: counts.failed,
+      na_count: counts.na, unrated_count: counts.unrated,
+      status: status,
+      storage_folder: folder,
+    };
+
+    btn.disabled = true;
+    const total = totalPhotos();
+    showOverlay('Submitting inspection…', 'Saving the report', 4);
+
+    try {
+      const ins = await sb.from('inspections').insert(row);
+      if (ins.error) throw ins.error;
+    } catch (err) {
+      hideOverlay(); btn.disabled = false;
+      $('statusLine').textContent = 'Could not save the report: ' + (err.message || 'unknown error') +
+        ' — your entries are still on screen, try again.';
+      return;
+    }
+
+    // upload photos into this inspection's own folder
+    const photoRows = [];
+    let done = 0, failedUploads = 0;
+    for (const cat of PHOTO_CATEGORIES) {
+      const list = photoStore[cat.key];
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        showOverlay('Uploading photos…', `Photo ${done + 1} of ${total} — ${cat.label}`,
+          6 + Math.round((done / Math.max(total, 1)) * 88));
+        try {
+          const prepared = await prepareImage(p.file);
+          const path = `${folder}/${cat.key}/${String(i + 1).padStart(3, '0')}-${safeName(prepared.name)}`;
+          const up = await sb.storage.from(BUCKET).upload(path, prepared.blob, {
+            contentType: prepared.type || 'image/jpeg', upsert: false, cacheControl: '3600'
+          });
+          if (up.error) throw up.error;
+          photoRows.push({
+            inspection_id: id, uploaded_by: session.user.id,
+            category: cat.label, category_key: cat.key,
+            caption: p.caption || null, file_name: prepared.name,
+            storage_path: path, mime_type: prepared.type || null,
+            size_bytes: prepared.blob.size, sort_order: photoRows.length,
+          });
+        } catch (err) {
+          failedUploads++;
+        }
+        done++;
+      }
+    }
+
+    if (photoRows.length) {
+      showOverlay('Finishing up…', 'Filing the photo record', 96);
+      const pr = await sb.from('inspection_photos').insert(photoRows);
+      if (pr.error) failedUploads += photoRows.length;
+    }
+
+    hideOverlay();
+    btn.disabled = false;
+    clearDraft();
+
+    const banner = $('resultBanner');
+    banner.classList.add('show');
+    if (counts.failed > 0) {
+      banner.style.background = 'var(--failed-bg)'; banner.style.color = 'var(--failed)';
+      banner.textContent = `Inspection saved — ${counts.failed} item(s) need immediate attention`;
+    } else if (counts.caution > 0) {
+      banner.style.background = 'var(--caution-bg)'; banner.style.color = 'var(--caution)';
+      banner.textContent = `Inspection saved — ${counts.caution} item(s) require attention soon`;
+    } else {
+      banner.style.background = 'var(--pass-bg)'; banner.style.color = 'var(--pass)';
+      banner.textContent = 'Inspection saved — all rated points passed';
+    }
+    banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    $('statusLine').textContent =
+      `${counts.pass} pass · ${counts.caution} caution · ${counts.failed} failed · ${counts.na} N/A` +
+      (counts.unrated ? ` · ${counts.unrated} not rated` : '') +
+      ` · ${photoRows.length} photo(s) filed in ${folder}/` +
+      (failedUploads ? ` · ${failedUploads} photo(s) failed to upload` : '');
+    $('draftLine').textContent = '';
+
+    logLoaded = false;
+    if (confirm('Inspection saved. Start a new blank inspection?')) resetForm();
+  });
+
+  function resetForm() {
+    form.reset();
+    PHOTO_CATEGORIES.forEach(c => {
+      photoStore[c.key].forEach(p => URL.revokeObjectURL(p.url));
+      photoStore[c.key] = [];
+      renderThumbs(c.key);
+    });
+    updatePhotoTotals();
+    updateProgress();
+    clearDraft();
+    $('resultBanner').classList.remove('show');
+    $('statusLine').textContent = '';
+    $('draftLine').textContent = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  $('resetBtn').addEventListener('click', () => {
+    if (confirm('Clear all entered data and remove attached photos?')) resetForm();
+  });
+  $('printBtn').addEventListener('click', () => window.print());
+
+  // ---------------------------------------------------------------- log
+  let logCache = [];
+  let logLoaded = false;
+
+  $('tabNew').addEventListener('click', () => {
+    $('tabNew').classList.add('active'); $('tabLog').classList.remove('active');
+    $('viewNew').classList.remove('hidden'); $('viewLog').classList.add('hidden');
+  });
+  $('tabLog').addEventListener('click', () => {
+    $('tabLog').classList.add('active'); $('tabNew').classList.remove('active');
+    $('viewLog').classList.remove('hidden'); $('viewNew').classList.add('hidden');
+    $('logDetailCard').classList.add('hidden'); $('logListCard').classList.remove('hidden');
+    if (!logLoaded) loadLog();
+  });
+  $('refreshLogBtn').addEventListener('click', () => { logLoaded = false; loadLog(); });
+  $('logSearch').addEventListener('input', (e) => renderLogList(e.target.value));
+
+  async function loadLog() {
+    $('logList').innerHTML = '<div class="log-empty">Loading…</div>';
+    const { data, error } = await sb.from('inspections')
+      .select('*').order('created_at', { ascending: false }).limit(500);
+    if (error) {
+      $('logList').innerHTML = '<div class="log-empty">Could not load the log: ' + escapeHtml(error.message) + '</div>';
+      return;
+    }
+    logCache = data || [];
+    logLoaded = true;
+    $('dbStatusNote').textContent = logCache.length + ' inspection(s) stored.';
+    renderLogList($('logSearch').value);
+  }
+
+  function statusPill(row) {
+    if ((row.failed_count || 0) > 0) return { cls: 'failed', label: row.failed_count + ' failed' };
+    if ((row.caution_count || 0) > 0) return { cls: 'caution', label: row.caution_count + ' caution' };
+    return { cls: 'ok', label: 'All pass' };
+  }
+
+  function renderLogList(filterText) {
+    const listEl = $('logList');
+    const q = (filterText || '').toLowerCase().trim();
+    const filtered = logCache.filter(e => {
+      if (!q) return true;
+      return `${e.customer || ''} ${e.property || ''} ${e.address || ''} ${e.city || ''} ${e.technician || ''}`
+        .toLowerCase().includes(q);
+    });
+    if (!filtered.length) {
+      listEl.innerHTML = `<div class="log-empty">${logCache.length ? 'No matches.' : 'No inspections logged yet.'}</div>`;
+      return;
+    }
+    listEl.innerHTML = '';
+    filtered.forEach(entry => {
+      const s = statusPill(entry);
+      const dateStr = entry.inspection_date || new Date(entry.created_at).toLocaleDateString();
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      div.innerHTML = `
+        <div class="log-entry-top">
+          <div>
+            <div class="log-entry-title">${escapeHtml(entry.customer || 'Unnamed customer')}${entry.property ? ' — ' + escapeHtml(entry.property) : ''}</div>
+            <div class="log-entry-sub">${escapeHtml(entry.address || '')}${entry.city ? ', ' + escapeHtml(entry.city) : ''} · ${escapeHtml(dateStr)} · ${escapeHtml(entry.technician || 'Unknown tech')} · ${entry.photo_count || 0} photo(s)</div>
+          </div>
+          <span class="status-pill ${s.cls}">${s.label}</span>
+        </div>`;
+      div.addEventListener('click', () => showLogDetail(entry));
+      listEl.appendChild(div);
+    });
+  }
+
+  async function showLogDetail(entry) {
+    $('logListCard').classList.add('hidden');
+    $('logDetailCard').classList.remove('hidden');
+    const content = $('logDetailContent');
+
+    function section(title, rows, note) {
+      if (!rows.length && !note) return '';
+      let out = `<h2>${title}</h2>` + rows.map(r =>
+        `<div class="detail-row"><span class="drname">${escapeHtml(r.name)}</span><span class="drval">${escapeHtml(r.right)}</span></div>`
+      ).join('');
+      if (note) out += `<p style="font-size:13px;color:var(--muted);white-space:pre-wrap;margin-top:8px;"><strong>Note:</strong> ${escapeHtml(note)}</p>`;
+      return out + '<div style="height:14px"></div>';
+    }
+
+    const sn = entry.section_notes || {};
+    let html = `<h2>${escapeHtml(entry.customer || 'Unnamed customer')}</h2>
+      <div class="detail-row"><span class="drname">Property Name</span><span class="drval">${escapeHtml(entry.property || '—')}</span></div>
+      <div class="detail-row"><span class="drname">Date</span><span class="drval">${escapeHtml(entry.inspection_date || new Date(entry.created_at).toLocaleDateString())}</span></div>
+      <div class="detail-row"><span class="drname">Technician</span><span class="drval">${escapeHtml(entry.technician || '—')}</span></div>
+      <div class="detail-row"><span class="drname">Address</span><span class="drval">${escapeHtml((entry.address || '') + (entry.city ? ', ' + entry.city : ''))}</span></div>
+      <div class="detail-row"><span class="drname">Phone</span><span class="drval">${escapeHtml(entry.phone || '—')}</span></div>
+      <div class="detail-row"><span class="drname">Dimensions</span><span class="drval">${escapeHtml(entry.dimensions || '—')}</span></div>
+      <div class="detail-row"><span class="drname">Size</span><span class="drval">${escapeHtml(entry.pool_size || '—')}</span></div>
+      <div class="detail-row"><span class="drname">Submitted by</span><span class="drval">${escapeHtml(entry.submitted_by_email || '—')}</span></div>
+      <div class="detail-row"><span class="drname">Score</span><span class="drval">${entry.pass_count} pass · ${entry.caution_count} caution · ${entry.failed_count} failed · ${entry.na_count} N/A</span></div>
+      <div class="detail-row"><span class="drname">Photo folder</span><span class="drval folder-path">${escapeHtml(entry.storage_folder || '—')}</span></div>
+      <div style="height:14px"></div>`;
+
+    html += section('Pool Water Chemistry', (entry.chemistry || []).map(i => ({
+      name: i.name, right: `${i.value ? i.value + ' — ' : ''}${RATING_LABELS[i.rating] || 'Not rated'}` })), sn.chemistry);
+    html += section('Pool Surface &amp; Decking', (entry.surface || []).map(i => ({ name: i.name, right: RATING_LABELS[i.rating] || 'Not rated' })), sn.surface);
+    html += section('Pool Equipment Inspection', (entry.equipment || []).map(i => ({ name: i.name, right: RATING_LABELS[i.rating] || 'Not rated' })), sn.equipment);
+    html += section('Safety &amp; General Inspection', (entry.safety || []).map(i => ({ name: i.name, right: RATING_LABELS[i.rating] || 'Not rated' })), sn.safety);
+    html += section('Commercial Signs &amp; Safety Equipment', (entry.commercial || []).map(i => ({ name: i.name, right: RATING_LABELS[i.rating] || 'Not rated' })), sn.commercial);
+    html += section('Surrounding Pool Area', (entry.surrounding || []).map(i => ({
+      name: i.question, right: i.answer ? (i.answer === 'yes' ? 'Yes' : 'No') : 'Not answered' })), sn.surrounding);
+
+    if (entry.notes) html += `<h2>Notes</h2><p style="font-size:14px;color:var(--muted);white-space:pre-wrap;">${escapeHtml(entry.notes)}</p><div style="height:14px"></div>`;
+    html += `<h2>Photos</h2><div id="detailPhotos"><p class="summary-line" style="text-align:left;">Loading photos…</p></div>`;
+    content.innerHTML = html;
+
+    const { data: photos, error } = await sb.from('inspection_photos')
+      .select('*').eq('inspection_id', entry.id).order('sort_order', { ascending: true });
+    const box = $('detailPhotos');
+    if (error) { box.innerHTML = '<p class="summary-line" style="text-align:left;">Could not load photos.</p>'; return; }
+    if (!photos || !photos.length) { box.innerHTML = '<p class="summary-line" style="text-align:left;">No photos attached.</p>'; return; }
+
+    const paths = photos.map(p => p.storage_path);
+    const { data: signed } = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
+    const urlByPath = {};
+    (signed || []).forEach(s => { if (s.path) urlByPath[s.path] = s.signedUrl; });
+
+    const groups = {};
+    photos.forEach(p => { (groups[p.category || 'Photos'] = groups[p.category || 'Photos'] || []).push(p); });
+    box.innerHTML = Object.keys(groups).map(cat => `
+      <p class="field-label" style="margin-top:12px;">${escapeHtml(cat)} (${groups[cat].length})</p>
+      <div class="gallery">${groups[cat].map(p => {
+        const u = urlByPath[p.storage_path] || '';
+        return `<a href="${u}" target="_blank" rel="noopener">
+          <img src="${u}" alt="${escapeHtml(p.file_name || '')}" loading="lazy">
+          <div class="gcap">${escapeHtml(p.caption || p.file_name || '')}</div></a>`;
+      }).join('')}</div>`).join('');
+  }
+
+  $('logDetailBack').addEventListener('click', () => {
+    $('logDetailCard').classList.add('hidden');
+    $('logListCard').classList.remove('hidden');
+  });
+
+  // ---------------------------------------------------------------- CSV export
+  function csvEscape(v) {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function ratingSummary(items) {
+    return (items || []).map(i => `${i.name}: ${i.value ? i.value + ' / ' : ''}${RATING_LABELS[i.rating] || 'Not rated'}`).join(' | ');
+  }
+  function buildCsv(rows) {
+    const headers = ['Inspection ID','Submitted At','Date','Customer','Property Name','Phone','Address','City',
+      'Dimensions','Pool Size (gal)','Technician','Submitted By','Pass','Caution','Failed','N/A','Not Rated',
+      'Status','Photos','Photo Folder','Overall Notes',
+      'Water Chemistry Detail','Chemistry Notes','Surface & Decking Detail','Surface Notes',
+      'Equipment Detail','Equipment Notes','Safety & General Detail','Safety Notes',
+      'Commercial Detail','Commercial Notes','Surrounding Area Detail','Surrounding Notes','Photo Notes'];
+    const body = rows.map(e => {
+      const sn = e.section_notes || {};
+      return [e.id, e.created_at, e.inspection_date, e.customer, e.property, e.phone, e.address, e.city,
+        e.dimensions, e.pool_size, e.technician, e.submitted_by_email,
+        e.pass_count, e.caution_count, e.failed_count, e.na_count, e.unrated_count, e.status,
+        e.photo_count, e.storage_folder, e.notes,
+        ratingSummary(e.chemistry), sn.chemistry, ratingSummary(e.surface), sn.surface,
+        ratingSummary(e.equipment), sn.equipment, ratingSummary(e.safety), sn.safety,
+        ratingSummary(e.commercial), sn.commercial,
+        (e.surrounding || []).map(q => `${q.question}: ${q.answer ? (q.answer === 'yes' ? 'Yes' : 'No') : 'Not answered'}`).join(' | '),
+        sn.surrounding, sn.photos].map(csvEscape).join(',');
+    });
+    return headers.map(csvEscape).join(',') + '\n' + body.join('\n');
+  }
+  $('exportCsvBtn').addEventListener('click', async () => {
+    if (!logLoaded) await loadLog();
+    if (!logCache.length) { alert('No inspections logged yet.'); return; }
+    const blob = new Blob(['\ufeff' + buildCsv(logCache)], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'poolie-inspections-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  });
+
+  // ---------------------------------------------------------------- auth flow
+  function showAuth(msg) {
+    $('appView').classList.add('hidden');
+    $('authView').classList.remove('hidden');
+    $('authMsg').textContent = msg || '';
+    $('authMsg').className = 'auth-error';
+  }
+  function showApp(session) {
+    $('authView').classList.add('hidden');
+    $('appView').classList.remove('hidden');
+    $('whoami').textContent = 'Signed in as ' + (session.user.email || 'staff');
+    const techField = $('f_tech');
+    if (!techField.value && session.user.user_metadata && session.user.user_metadata.full_name) {
+      techField.value = session.user.user_metadata.full_name;
+    }
+    if (!$('f_date').value) $('f_date').value = new Date().toISOString().slice(0, 10);
+    restoreDraft();
+  }
+
+  $('signInBtn').addEventListener('click', async () => {
+    const email = $('authEmail').value.trim(), password = $('authPassword').value;
+    if (!email || !password) { $('authMsg').textContent = 'Enter your email and password.'; return; }
+    $('signInBtn').disabled = true; $('authMsg').textContent = 'Signing in…';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    $('signInBtn').disabled = false;
+    if (error) { $('authMsg').className = 'auth-error'; $('authMsg').textContent = error.message; }
+  });
+  $('authPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('signInBtn').click(); });
+
+  $('magicLinkBtn').addEventListener('click', async () => {
+    const email = $('authEmail').value.trim();
+    if (!email) { $('authMsg').textContent = 'Enter your email first.'; return; }
+    const { error } = await sb.auth.signInWithOtp({
+      email, options: { emailRedirectTo: window.location.href.split('#')[0] }
+    });
+    if (error) { $('authMsg').className = 'auth-error'; $('authMsg').textContent = error.message; }
+    else { $('authMsg').className = 'auth-ok'; $('authMsg').textContent = 'Check your email for the sign-in link.'; }
+  });
+
+  $('signOutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+    showAuth('Signed out.');
+  });
+
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session) showApp(session); else showAuth('');
+  });
+  (async () => {
+    const { data } = await sb.auth.getSession();
+    if (data && data.session) showApp(data.session); else showAuth('');
+  })();
+})();
+</script>
+</body>
+</html>
