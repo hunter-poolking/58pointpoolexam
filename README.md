@@ -83,11 +83,11 @@ create accounts. Turn it back on briefly if you'd rather have techs self-registe
 The third tab reviews a client's property list before a bid (first list: NRP Group, 47 properties,
 due October 2, 2026). For each property it shows:
 
-- **58-point exam results**, pulled from `inspections`. A property links automatically to the newest
-  inspection whose Property Name (or Customer) matches the property's name; pick a different one
-  from the "Inspection on file" menu if the match is wrong. Section scores, chemistry readings,
-  notes, a "Needs attention" list of failed/caution items, and the inspection's photos all come
-  straight from what the tech submitted.
+- **58-point exam results**, filled in from `inspections`. A property links automatically to the
+  newest inspection whose Property Name (or Customer) matches the property's name; pick a different
+  one from the "Inspection on file" menu if the match is wrong. Reviewers can mark or correct any
+  item, reading or note right in the review. Those changes are saved to `pool_reviews` only, never
+  to the tech's inspection, and "Reset to inspection results" undoes them.
 - **Category 0–5** and **Inspection Result** (Fail / At risk / Pass), set by the reviewer.
 - **Poolbrain link** next to the property name.
 - **Service pricing**: April–October 3x/week and November–March 2x/week monthly prices; yearly is

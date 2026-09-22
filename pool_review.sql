@@ -159,3 +159,13 @@ on conflict (id) do update set
   client = excluded.client, name = excluded.name, address = excluded.address, city = excluded.city,
   region = excluded.region, website = excluded.website, manager = excluded.manager, phone = excluded.phone,
   exam_days = excluded.exam_days, techs = excluded.techs, sort_order = excluded.sort_order;
+
+-- 5. Exam results can be marked or corrected in the review itself (applied as migration pool_review_exam_fields).
+-- Each section stored here overrides the linked inspection's section; empty = use the inspection.
+alter table public.pool_reviews
+  add column if not exists exam          jsonb,
+  add column if not exists chem_readings jsonb,
+  add column if not exists exam_notes    jsonb,
+  add column if not exists exam_date     date,
+  add column if not exists exam_tech     text,
+  add column if not exists pool_size     text;
