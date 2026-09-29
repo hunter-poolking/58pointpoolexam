@@ -76,6 +76,17 @@
     if (r.inspection_id) return { insp: inspections.find(i => i.id === r.inspection_id) || null, auto: false };
     return { insp: matchedInspections(p)[0] || null, auto: true };
   }
+  // Photos follow the property, not just the linked exam: every inspection whose name matches
+  // this property (plus a pinned one) keeps showing its photos, newest first.
+  function photoInspections(p) {
+    const list = matchedInspections(p).slice();
+    const r = review(p.id);
+    if (r.inspection_id && !list.some(i => i.id === r.inspection_id)) {
+      const pinned = inspections.find(i => i.id === r.inspection_id);
+      if (pinned) list.unshift(pinned);
+    }
+    return list;
+  }
   // the exam as shown: each section from the review if edited there, otherwise from the inspection
   function examView(p) {
     const r = review(p.id), { insp, auto } = inspFor(p);
@@ -394,12 +405,17 @@
   }
   async function loadDetailPhotos() {
     const id = sel; const p = props.find(x => x.id === id); if (!p) return;
-    const { insp } = inspFor(p);
-    if (insp && !examPhotos[insp.id]) {
-      const { data } = await sb.from('inspection_photos').select('*').eq('inspection_id', insp.id).order('sort_order', { ascending: true });
-      examPhotos[insp.id] = data || [];
+    const insps = photoInspections(p);
+    const missing = insps.filter(i => !examPhotos[i.id]).map(i => i.id);
+    if (missing.length) {
+      const { data } = await sb.from('inspection_photos').select('*').in('inspection_id', missing)
+        .order('sort_order', { ascending: true });
+      missing.forEach(iid => { examPhotos[iid] = []; });
+      (data || []).forEach(r => { (examPhotos[r.inspection_id] = examPhotos[r.inspection_id] || []).push(r); });
     }
-    await signPaths(photosFor(id).map(r => r.storage_path).concat(insp ? (examPhotos[insp.id] || []).map(r => r.storage_path) : []));
+    const paths = photosFor(id).map(r => r.storage_path);
+    insps.forEach(i => (examPhotos[i.id] || []).forEach(r => paths.push(r.storage_path)));
+    await signPaths(paths);
     if (sel === id) renderPhotos(true);
   }
 
@@ -455,8 +471,10 @@
   function photosInner() {
     const p = props.find(x => x.id === sel); if (!p) return '';
     const { insp } = inspFor(p);
-    const mine = photosFor(sel), ups = uploads.filter(u => u.pid === sel), exPh = insp ? (examPhotos[insp.id] || []) : [];
-    const total = mine.length + exPh.length;
+    const exGroups = photoInspections(p).map(i => ({ insp: i, photos: examPhotos[i.id] || [] }))
+      .filter(g => g.photos.length);
+    const mine = photosFor(sel), ups = uploads.filter(u => u.pid === sel);
+    const total = mine.length + exGroups.reduce((n, g) => n + g.photos.length, 0);
     let html = `<div class="pr-sumrow"><h3>Photos</h3><span class="pr-msg">${total ? `${total} photo${total > 1 ? 's' : ''}` : ''}</span></div>
       <div class="pr-drop" id="prDrop">
         <div><b>Drop photos here</b></div>
@@ -483,9 +501,12 @@
       }
       html += '</div></div>';
     }
-    if (exPh.length) {
-      html += `<div class="pr-pgroup"><h4>From the inspection <small>${exPh.length}</small></h4><div class="pr-pgrid">`;
-      for (const ph of exPh) {
+    for (const g of exGroups) {
+      const when = g.insp.inspection_date || new Date(g.insp.created_at).toLocaleDateString();
+      const who = g.insp.technician ? ', ' + g.insp.technician : '';
+      const cur = insp && g.insp.id === insp.id ? ' <small class="pr-cur">current exam</small>' : '';
+      html += `<div class="pr-pgroup"><h4>Inspection ${esc(when)}${esc(who)}${cur} <small>${g.photos.length}</small></h4><div class="pr-pgrid">`;
+      for (const ph of g.photos) {
         const u = urlFor(ph.storage_path), idx = all.push({ url: u, cap: ph.caption, cat: ph.category || 'Inspection photo' }) - 1;
         html += `<figure class="pr-tile"><button type="button" class="pr-thumb" data-open="${idx}" aria-label="Open photo">${u ? `<img src="${esc(u)}" alt="${esc(ph.caption || ph.category || '')}" loading="lazy">` : '<span class="pr-ov">Loading…</span>'}</button>
           <div class="pr-meta pr-meta-ro">${esc(ph.caption || ph.category || '')}</div></figure>`;

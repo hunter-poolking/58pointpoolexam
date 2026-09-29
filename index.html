@@ -396,6 +396,8 @@
   #viewReview .pr-pgroup { margin-top: 14px; }
   #viewReview .pr-pgroup h4 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
   #viewReview .pr-pgroup h4 small { font-weight: 400; color: var(--pr-muted); }
+  #viewReview .pr-pgroup h4 small.pr-cur { background: var(--pr-muted); color: #fff; border-radius: 20px;
+    padding: 2px 8px; font-size: 11px; margin-left: 4px; }
   #viewReview .pr-pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   #viewReview .pr-tile { margin: 0; border: 1px solid var(--pr-line); border-radius: 8px; overflow: hidden; background: var(--pr-panel); display: flex; flex-direction: column; }
   #viewReview .pr-thumb { display: block; background: var(--pr-line-2); aspect-ratio: 4/3; width: 100%; cursor: zoom-in; position: relative; overflow: hidden; }
@@ -477,7 +479,7 @@
 
   <div class="userbar">
     <span id="whoami"></span>
-    <span style="opacity:0.7;">· build 5</span>
+    <span style="opacity:0.7;">· build 6</span>
     <button type="button" id="signOutBtn">Sign out</button>
   </div>
 
@@ -1435,6 +1437,6 @@
   })();
 })();
 </script>
-<script src="./pool-review.js?v=5"></script>
+<script src="./pool-review.js?v=6"></script>
 </body>
 </html>
