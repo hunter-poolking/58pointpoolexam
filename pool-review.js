@@ -30,12 +30,21 @@
   const SUMMER_MONTHS = 7, WINTER_MONTHS = 5;
   const CLIENT_NOTES = { 'NRP Group': 'Bid due October 2, 2026.' };
   const JSON_FIELDS = ['exam', 'chem_readings', 'exam_notes'];
+  // One-off quoted work. Recurring weekly service pricing is deliberately NOT part of this.
+  const KINDS = [
+    { key: 'service',    label: 'Service Items',    hint: 'One-off work to make the pool serviceable — drain & clean, algae treatment, filter media.' },
+    { key: 'repair',     label: 'Repair Items',     hint: 'Fixing what is broken — pumps, valves, lights, leaks, safety equipment.' },
+    { key: 'renovation', label: 'Renovation Items', hint: 'Capital work — replaster, tile, coping, decking.' },
+  ];
+  const kindLabel = k => (KINDS.find(x => x.key === k) || {}).label || k;
 
   // ---------------------------------------------------------------- state
   let loaded = false, loading = null, channel = null, session = null;
   let props = [], reviews = {}, inspections = [], rphotos = {};
   const pending = {}, timers = {}, inflight = {};
   const signed = {}, examPhotos = {}, uploads = [];
+  let items = {}, itemsReady = false;   // quoted work line items, keyed by id
+  let costOpen = {};                    // which rows are expanded on the cost report
   let picked = new Set();   // ids of review photos ticked for bulk delete
   let bulkBusy = false;
   let sel = null, pbEdit = false, pbDraft = '', confirmDel = null, lb = null, lbList = [];
@@ -54,6 +63,15 @@
   }
   const setSync = t => { const el = $('prSync'); if (el) el.textContent = t; };
   const fmtSaved = r => r && r.updated_at ? `Last saved ${new Date(r.updated_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${r.updated_by_email ? ' by ' + esc(r.updated_by_email.split('@')[0]) : ''}` : '';
+
+  function itemsFor(pid, kind) {
+    return Object.values(items)
+      .filter(r => r.property_id === pid && (!kind || r.kind === kind))
+      .sort((a, b) => (a.sort_order - b.sort_order) || String(a.created_at).localeCompare(String(b.created_at)));
+  }
+  const lineTotal = r => (num(r.qty) == null ? 1 : num(r.qty)) * (num(r.unit_price) || 0);
+  const kindTotal = (pid, kind) => itemsFor(pid, kind).reduce((a, r) => a + lineTotal(r), 0);
+  const quotedTotal = pid => itemsFor(pid).reduce((a, r) => a + lineTotal(r), 0);
 
   function review(id) {
     const d = reviews[id] || {}, p = pending[id] || {};
@@ -197,12 +215,21 @@
       $('prSub').textContent = '58-point exam results, service pricing and needed work.' + (clients.length === 1 && CLIENT_NOTES[clients[0]] ? ' ' + CLIENT_NOTES[clients[0]] : '');
       const regions = [...new Set(props.map(p => p.region).filter(Boolean))];
       $('prRegions').innerHTML = ['', ...regions].map(r => `<button type="button" data-r="${esc(r)}" aria-pressed="${ui.region === r}">${esc(r || 'All')}</button>`).join('');
+      loadLineItems();
       subscribe();
       setSync('Changes save automatically for everyone.');
       renderStats(); renderList(); renderDetail();
     })();
     return loading;
   }
+  // Loaded separately so a missing table never blocks the rest of the review.
+  async function loadLineItems() {
+    const li = await fetchAll('pool_review_line_items', '*', 'id');
+    if (li.error) { itemsReady = false; items = {}; }
+    else { items = {}; (li.data || []).forEach(r => { items[r.id] = r; }); itemsReady = true; }
+    renderDetail(); renderCosts();
+  }
+
   function subscribe() {
     if (channel) return;
     channel = sb.channel('pool-review')
@@ -210,6 +237,12 @@
         if (payload.eventType === 'DELETE') delete reviews[payload.old.property_id];
         else reviews[payload.new.property_id] = payload.new;
         renderStats(); renderList(); if (sel === (payload.new || payload.old).property_id) softRefresh();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pool_review_line_items' }, payload => {
+        if (payload.eventType === 'DELETE') delete items[payload.old.id]; else items[payload.new.id] = payload.new;
+        const pid = (payload.new || payload.old).property_id;
+        if (sel === pid) softRefresh();
+        renderCosts();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pool_review_photos' }, payload => {
         if (payload.eventType === 'DELETE') delete rphotos[payload.old.id]; else rphotos[payload.new.id] = payload.new;
@@ -402,7 +435,103 @@
         <div><label class="pr-f" for="prReno">Renovations needed</label><textarea class="pr-in" id="prReno" data-f="renovations" placeholder="e.g. Replaster within 12 months">${esc(r.renovations || '')}</textarea></div>
         <div><label class="pr-f" for="prMaint">Maintenance needed</label><textarea class="pr-in" id="prMaint" data-f="maintenance" placeholder="e.g. Clean filter, trim vegetation at pad">${esc(r.maintenance || '')}</textarea></div>
       </div>
-    </div>`;
+    </div>
+
+    ${quotedCard(p)}`;
+  }
+
+  // ---------------------------------------------------------------- quoted work
+  function quotedCard(p) {
+    if (!itemsReady) {
+      return `<div class="pr-card"><h3>Quoted work</h3>
+        <p class="pr-fine">Line items aren't set up yet. Run <code>supabase/line_items.sql</code> in the
+        Supabase SQL editor, then reload.</p></div>`;
+    }
+    const grand = quotedTotal(p.id);
+    let html = `<div class="pr-card"><h3>Quoted work <span class="pr-gt">${money(grand)}</span></h3>
+      <p class="pr-fine">One-off work only. The weekly service pricing above is separate and is not counted here.</p>`;
+    for (const k of KINDS) {
+      const list = itemsFor(p.id, k.key), sub = kindTotal(p.id, k.key);
+      html += `<div class="pr-li-group">
+        <div class="pr-li-head">
+          <div><b>${k.label}</b><small>${esc(k.hint)}</small></div>
+          <div class="pr-li-sub">${money(sub)}</div>
+        </div>`;
+      if (list.length) {
+        html += `<div class="pr-li-tbl"><div class="pr-li-row pr-li-hdr">
+            <span>Part #</span><span>Name</span><span>Qty</span><span>Unit price</span><span>Total</span><span></span>
+          </div>`;
+        for (const it of list) {
+          html += `<div class="pr-li-row">
+            <input class="pr-in" data-li="${it.id}|part_no" value="${esc(it.part_no || '')}" placeholder="140316" aria-label="Part number">
+            <input class="pr-in" data-li="${it.id}|name" value="${esc(it.name || '')}" placeholder="Pentair 36&quot; Triton C sand filter, installed" aria-label="Item name">
+            <input class="pr-in" data-li="${it.id}|qty" inputmode="decimal" value="${esc(it.qty ?? 1)}" aria-label="Quantity">
+            <span class="pr-money">$<input class="pr-in" data-li="${it.id}|unit_price" inputmode="decimal" value="${esc(it.unit_price ?? '')}" placeholder="0" aria-label="Unit price"></span>
+            <span class="pr-li-tot">${money(lineTotal(it))}</span>
+            <button type="button" class="pr-li-x" data-lidel="${it.id}" aria-label="Remove line item">&times;</button>
+          </div>`;
+        }
+        html += `</div>`;
+      } else {
+        html += `<p class="pr-fine pr-li-empty">Nothing quoted yet.</p>`;
+      }
+      html += `<button type="button" class="pr-li-add" data-liadd="${k.key}">+ Add line item</button></div>`;
+    }
+    return html + `<div class="pr-li-grand"><span>Total quoted work</span><b>${money(grand)}</b></div></div>`;
+  }
+
+  async function addLineItem(pid, kind) {
+    const row = {
+      property_id: pid, kind: kind, part_no: '', name: '', qty: 1, unit_price: 0,
+      sort_order: itemsFor(pid, kind).length,
+      updated_by: session && session.user ? session.user.id : null,
+      updated_by_email: session && session.user ? session.user.email : null,
+    };
+    setSync('Saving…');
+    const { data, error } = await sb.from('pool_review_line_items').insert(row).select().single();
+    if (error) { setSync('Could not add the line item.'); return; }
+    items[data.id] = data;
+    setSync('All changes saved.');
+    softRefresh(); renderCosts();
+  }
+
+  async function delLineItem(id) {
+    const row = items[id]; if (!row) return;
+    delete items[id];
+    softRefresh(); renderCosts(); setSync('Saving…');
+    const { error } = await sb.from('pool_review_line_items').delete().eq('id', id);
+    if (error) { items[id] = row; softRefresh(); renderCosts(); setSync('Could not remove the line item.'); }
+    else setSync('All changes saved.');
+  }
+
+  function queueLineItem(id, field, value) {
+    const row = items[id]; if (!row) return;
+    const v = (field === 'qty' || field === 'unit_price') ? (num(value) ?? 0) : value;
+    items[id] = { ...row, [field]: v };
+    const el = document.querySelector(`[data-li="${id}|${field}"]`);
+    const tot = el && el.closest('.pr-li-row') && el.closest('.pr-li-row').querySelector('.pr-li-tot');
+    if (tot) tot.textContent = money(lineTotal(items[id]));
+    const card = el && el.closest('.pr-card');
+    if (card) {
+      const p = props.find(x => x.id === sel);
+      if (p) {
+        const g = card.querySelector('.pr-gt'), gr = card.querySelector('.pr-li-grand b');
+        if (g) g.textContent = money(quotedTotal(p.id));
+        if (gr) gr.textContent = money(quotedTotal(p.id));
+        const grp = el.closest('.pr-li-group'), subEl = grp && grp.querySelector('.pr-li-sub');
+        if (subEl) subEl.textContent = money(kindTotal(p.id, items[id].kind));
+      }
+    }
+    setSync('Saving…');
+    clearTimeout(timers['li' + id]);
+    timers['li' + id] = setTimeout(async () => {
+      const patch = { [field]: v,
+        updated_by: session && session.user ? session.user.id : null,
+        updated_by_email: session && session.user ? session.user.email : null };
+      const { error } = await sb.from('pool_review_line_items').update(patch).eq('id', id);
+      setSync(error ? 'Could not save that line item.' : 'All changes saved.');
+      renderCosts();
+    }, 650);
   }
   function softRefresh() {
     const a = document.activeElement, d = $('prDetail');
@@ -677,6 +806,106 @@
 
   // ---------------------------------------------------------------- events
   $('tabReview').addEventListener('click', () => { P.showTab('Review'); if (!loaded) load(); });
+  $('tabCosts').addEventListener('click', () => {
+    P.showTab('Costs');
+    if (!loaded) load().then(renderCosts); else renderCosts();
+  });
+
+  // ---------------------------------------------------------------- cost report
+  function renderCosts() {
+    const host = $('viewCosts'); if (!host) return;
+    if (!loaded) { host.innerHTML = '<div class="pr-card"><p class="pr-fine">Loading…</p></div>'; return; }
+    if (!itemsReady) {
+      host.innerHTML = `<div class="pr-card"><h3>Cost report</h3><p class="pr-fine">Line items aren't set up
+        yet. Run <code>supabase/line_items.sql</code> in the Supabase SQL editor, then reload.</p></div>`;
+      return;
+    }
+    const quoted = props.filter(p => itemsFor(p.id).length);
+    const totals = { service: 0, repair: 0, renovation: 0 };
+    quoted.forEach(p => KINDS.forEach(k => { totals[k.key] += kindTotal(p.id, k.key); }));
+    const grand = totals.service + totals.repair + totals.renovation;
+    let serviceYear = 0, servicePriced = 0;
+    props.forEach(p => { const y = yearly(review(p.id)); if (y != null) { serviceYear += y; servicePriced++; } });
+
+    let html = `<div class="pr-top"><div class="pr-top-inner">
+        <div><h1>Cost report</h1><p>One-off quoted work across every property. Recurring service pricing is tracked separately.</p></div>
+        <div class="pr-stats">
+          ${KINDS.map(k => `<div class="pr-stat"><b>${money(totals[k.key])}</b><span>${k.label.replace(' Items', '')}</span></div>`).join('')}
+          <div class="pr-stat"><b>${money(grand)}</b><span>total quoted</span></div>
+          <div class="pr-stat"><b>${quoted.length}</b><span>of ${props.length} quoted</span></div>
+        </div>
+      </div></div>
+
+      <div class="pr-card pr-svc-note">
+        <div><b>Recurring service pricing — kept separate</b>
+          <small>Weekly maintenance contract value across ${servicePriced} priced propert${servicePriced === 1 ? 'y' : 'ies'}. Not included in any total above.</small></div>
+        <div class="pr-svc-amt">${money(serviceYear)}<small>per year</small></div>
+      </div>`;
+
+    if (!quoted.length) {
+      html += `<div class="pr-card"><p class="pr-fine">No quoted work yet. Add line items on a property in the Pool Review tab and they'll roll up here.</p></div>`;
+      host.innerHTML = html; return;
+    }
+
+    html += '<div class="pr-card"><h3>By property</h3><div class="pr-cost-list">';
+    const byRegion = {};
+    quoted.forEach(p => { (byRegion[p.region || 'Other'] = byRegion[p.region || 'Other'] || []).push(p); });
+    for (const region of Object.keys(byRegion)) {
+      const regTotal = byRegion[region].reduce((a, p) => a + quotedTotal(p.id), 0);
+      html += `<div class="pr-cost-region"><span>${esc(region)}</span><span>${money(regTotal)}</span></div>`;
+      for (const p of byRegion[region].sort((a, b) => quotedTotal(b.id) - quotedTotal(a.id))) {
+        const open = !!costOpen[p.id];
+        html += `<details class="pr-cost-prop"${open ? ' open' : ''} data-cprop="${p.id}">
+          <summary><span class="chev">›</span><span class="nm">${esc(p.name)}</span>
+            <span class="ct">${itemsFor(p.id).length} item${itemsFor(p.id).length === 1 ? '' : 's'}</span>
+            <span class="amt">${money(quotedTotal(p.id))}</span></summary><div class="pr-cost-body">`;
+        for (const k of KINDS) {
+          const list = itemsFor(p.id, k.key); if (!list.length) continue;
+          const kOpen = !!costOpen[p.id + ':' + k.key];
+          html += `<details class="pr-cost-kind"${kOpen ? ' open' : ''} data-ckind="${p.id}:${k.key}">
+            <summary><span class="chev">›</span><span class="nm">${k.label}</span>
+              <span class="ct">${list.length}</span><span class="amt">${money(kindTotal(p.id, k.key))}</span></summary>
+            <table class="pr-cost-items"><thead><tr><th>Part #</th><th>Name</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead><tbody>
+            ${list.map(it => `<tr><td>${esc(it.part_no || '—')}</td><td>${esc(it.name || '—')}</td>
+              <td>${esc(it.qty ?? 1)}</td><td>${money(num(it.unit_price) || 0)}</td><td>${money(lineTotal(it))}</td></tr>`).join('')}
+            </tbody></table></details>`;
+        }
+        html += '</div></details>';
+      }
+    }
+    html += `</div><div class="pr-li-grand"><span>Total quoted work, all properties</span><b>${money(grand)}</b></div>`;
+    html += `<div class="pr-cost-acts"><button type="button" class="pr-li-add" id="prCostCsv">Export line items CSV</button></div></div>`;
+    host.innerHTML = html;
+  }
+
+  // remember which rows the user opened so a live update doesn't collapse them
+  document.addEventListener('toggle', e => {
+    const d = e.target;
+    if (!d || !d.dataset) return;
+    const key = d.dataset.cprop || d.dataset.ckind;
+    if (key) { if (d.open) costOpen[key] = true; else delete costOpen[key]; }
+  }, true);
+
+  document.addEventListener('click', e => {
+    if (e.target && e.target.id === 'prCostCsv') exportLineItems();
+  });
+
+  function exportLineItems() {
+    const esc2 = v => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const head = ['Region', 'Property', 'Category', 'Part #', 'Name', 'Qty', 'Unit price', 'Line total'];
+    const rows = [];
+    props.forEach(p => itemsFor(p.id).forEach(it => rows.push([
+      p.region || '', p.name, kindLabel(it.kind), it.part_no || '', it.name || '',
+      it.qty ?? 1, num(it.unit_price) || 0, lineTotal(it)
+    ].map(esc2).join(','))));
+    if (!rows.length) { alert('No line items yet.'); return; }
+    const blob = new Blob(['\ufeff' + head.map(esc2).join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'poolie-quoted-work-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
   $('prRefresh').addEventListener('click', () => { loaded = false; Object.keys(examPhotos).forEach(k => delete examPhotos[k]); load().then(() => { if (sel) loadDetailPhotos(); }); });
   $('prExport').addEventListener('click', () => { if (loaded) exportCsv(); });
   $('prQ').addEventListener('input', e => { ui.q = e.target.value; renderList(); });
@@ -719,6 +948,8 @@
     }
     if (t.id === 'prPick') { const f = $('prFileIn'); if (f) f.click(); return; }
     const o = t.closest('[data-open]'); if (o) { openLb(Number(o.dataset.open)); return; }
+    if (t.dataset.liadd) { addLineItem(sel, t.dataset.liadd); return; }
+    if (t.dataset.lidel) { delLineItem(t.dataset.lidel); return; }
     if (t.dataset.selall) { photosFor(sel).forEach(r => picked.add(r.id)); renderPhotos(true); return; }
     if (t.dataset.seldup) { duplicateIds(photosFor(sel)).forEach(id => picked.add(id)); renderPhotos(true); return; }
     if (t.dataset.selnone) { picked.clear(); renderPhotos(true); return; }
@@ -736,6 +967,7 @@
   D.addEventListener('input', e => {
     const t = e.target;
     if (t.id === 'prPbIn') { pbDraft = t.value; return; }
+    if (t.dataset.li) { const [id, field] = t.dataset.li.split('|'); queueLineItem(id, field, t.value); return; }
     if (t.dataset.f) {
       queue(sel, { [t.dataset.f]: t.value });
       if (t.dataset.f === 'price_3x' || t.dataset.f === 'price_2x') $('prYearly').textContent = money(yearly(review(sel)));
