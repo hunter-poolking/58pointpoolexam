@@ -151,6 +151,20 @@
   }
   const urlFor = path => (signed[path] && signed[path].url) || '';
 
+  // PostgREST caps a request at 1000 rows, and without an explicit order the 1000 you get
+  // back aren't even the same ones each time. Page through so everyone sees every photo.
+  async function fetchAll(table, cols, orderCol) {
+    const out = [], size = 1000;
+    for (let from = 0; from < 100000; from += size) {
+      const { data, error } = await sb.from(table).select(cols)
+        .order(orderCol, { ascending: true }).range(from, from + size - 1);
+      if (error) return { data: out, error };
+      out.push(...(data || []));
+      if (!data || data.length < size) break;
+    }
+    return { data: out, error: null };
+  }
+
   // ---------------------------------------------------------------- load + live updates
   async function load() {
     if (loading) return loading;
@@ -161,7 +175,7 @@
       const [pr, rv, ph, ins] = await Promise.all([
         sb.from('pool_review_properties').select('*').order('sort_order', { ascending: true }),
         sb.from('pool_reviews').select('*'),
-        sb.from('pool_review_photos').select('*'),
+        fetchAll('pool_review_photos', '*', 'id'),
         sb.from('inspections').select('id,created_at,inspection_date,technician,customer,property,address,city,dimensions,pool_size,notes,section_notes,chemistry,surface,equipment,safety,commercial,surrounding,photo_count')
           .order('inspection_date', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }).limit(1000),
       ]);
