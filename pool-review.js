@@ -37,6 +37,14 @@
     { key: 'renovation', label: 'Renovation Items', hint: 'Capital work — replaster, tile, coping, decking.' },
   ];
   const kindLabel = k => (KINDS.find(x => x.key === k) || {}).label || k;
+  const URGENCY = [
+    { key: 'needed',      label: 'Needed',      when: '0–90 days' },
+    { key: 'recommended', label: 'Recommended', when: '90–360 days' },
+    { key: 'future',      label: 'Future',      when: '360+ days' },
+  ];
+  const urgOf = r => (r && r.urgency) || 'needed';
+  const urgLabel = k => (URGENCY.find(u => u.key === k) || {}).label || k;
+  const urgWhen = k => (URGENCY.find(u => u.key === k) || {}).when || '';
 
   // ---------------------------------------------------------------- state
   let loaded = false, loading = null, channel = null, session = null;
@@ -45,6 +53,7 @@
   const signed = {}, examPhotos = {}, uploads = [];
   let items = {}, itemsReady = false;   // quoted work line items, keyed by id
   let costOpen = {};                    // which rows are expanded on the cost report
+  let costFilter = '';                  // '' | needed | recommended | future
   let picked = new Set();   // ids of review photos ticked for bulk delete
   let bulkBusy = false;
   let sel = null, pbEdit = false, pbDraft = '', confirmDel = null, lb = null, lbList = [];
@@ -64,14 +73,14 @@
   const setSync = t => { const el = $('prSync'); if (el) el.textContent = t; };
   const fmtSaved = r => r && r.updated_at ? `Last saved ${new Date(r.updated_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${r.updated_by_email ? ' by ' + esc(r.updated_by_email.split('@')[0]) : ''}` : '';
 
-  function itemsFor(pid, kind) {
+  function itemsFor(pid, kind, urgency) {
     return Object.values(items)
-      .filter(r => r.property_id === pid && (!kind || r.kind === kind))
+      .filter(r => r.property_id === pid && (!kind || r.kind === kind) && (!urgency || urgOf(r) === urgency))
       .sort((a, b) => (a.sort_order - b.sort_order) || String(a.created_at).localeCompare(String(b.created_at)));
   }
   const lineTotal = r => (num(r.qty) == null ? 1 : num(r.qty)) * (num(r.unit_price) || 0);
-  const kindTotal = (pid, kind) => itemsFor(pid, kind).reduce((a, r) => a + lineTotal(r), 0);
-  const quotedTotal = pid => itemsFor(pid).reduce((a, r) => a + lineTotal(r), 0);
+  const kindTotal = (pid, kind, urgency) => itemsFor(pid, kind, urgency).reduce((a, r) => a + lineTotal(r), 0);
+  const quotedTotal = (pid, urgency) => itemsFor(pid, null, urgency).reduce((a, r) => a + lineTotal(r), 0);
 
   function review(id) {
     const d = reviews[id] || {}, p = pending[id] || {};
@@ -459,12 +468,15 @@
         </div>`;
       if (list.length) {
         html += `<div class="pr-li-tbl"><div class="pr-li-row pr-li-hdr">
-            <span>Part #</span><span>Name</span><span>Qty</span><span>Unit price</span><span>Total</span><span></span>
+            <span>Part #</span><span>Name</span><span>When</span><span>Qty</span><span>Unit price</span><span>Total</span><span></span>
           </div>`;
         for (const it of list) {
-          html += `<div class="pr-li-row">
+          html += `<div class="pr-li-row u-${urgOf(it)}">
             <input class="pr-in" data-li="${it.id}|part_no" value="${esc(it.part_no || '')}" placeholder="140316" aria-label="Part number">
             <input class="pr-in" data-li="${it.id}|name" value="${esc(it.name || '')}" placeholder="Pentair 36&quot; Triton C sand filter, installed" aria-label="Item name">
+            <select class="pr-in pr-urg" data-li="${it.id}|urgency" aria-label="Urgency">
+              ${URGENCY.map(u => `<option value="${u.key}"${urgOf(it) === u.key ? ' selected' : ''}>${u.label} · ${u.when}</option>`).join('')}
+            </select>
             <input class="pr-in" data-li="${it.id}|qty" inputmode="decimal" value="${esc(it.qty ?? 1)}" aria-label="Quantity">
             <span class="pr-money">$<input class="pr-in" data-li="${it.id}|unit_price" inputmode="decimal" value="${esc(it.unit_price ?? '')}" placeholder="0" aria-label="Unit price"></span>
             <span class="pr-li-tot">${money(lineTotal(it))}</span>
@@ -477,12 +489,16 @@
       }
       html += `<button type="button" class="pr-li-add" data-liadd="${k.key}">+ Add line item</button></div>`;
     }
+    html += `<div class="pr-urg-strip">${URGENCY.map(u => {
+      const t = quotedTotal(p.id, u.key);
+      return `<div class="pr-urg-cell u-${u.key}"><b>${money(t)}</b><span>${u.label}</span><small>${u.when}</small></div>`;
+    }).join('')}</div>`;
     return html + `<div class="pr-li-grand"><span>Total quoted work</span><b>${money(grand)}</b></div></div>`;
   }
 
   async function addLineItem(pid, kind) {
     const row = {
-      property_id: pid, kind: kind, part_no: '', name: '', qty: 1, unit_price: 0,
+      property_id: pid, kind: kind, part_no: '', name: '', qty: 1, unit_price: 0, urgency: 'needed',
       sort_order: itemsFor(pid, kind).length,
       updated_by: session && session.user ? session.user.id : null,
       updated_by_email: session && session.user ? session.user.email : null,
@@ -820,10 +836,13 @@
         yet. Run <code>supabase/line_items.sql</code> in the Supabase SQL editor, then reload.</p></div>`;
       return;
     }
-    const quoted = props.filter(p => itemsFor(p.id).length);
+    const f = costFilter || '';
+    const quoted = props.filter(p => itemsFor(p.id, null, f).length);
     const totals = { service: 0, repair: 0, renovation: 0 };
-    quoted.forEach(p => KINDS.forEach(k => { totals[k.key] += kindTotal(p.id, k.key); }));
+    quoted.forEach(p => KINDS.forEach(k => { totals[k.key] += kindTotal(p.id, k.key, f); }));
     const grand = totals.service + totals.repair + totals.renovation;
+    const urgTotals = {};
+    URGENCY.forEach(u => { urgTotals[u.key] = props.reduce((a, p) => a + quotedTotal(p.id, u.key), 0); });
     let serviceYear = 0, servicePriced = 0;
     props.forEach(p => { const y = yearly(review(p.id)); if (y != null) { serviceYear += y; servicePriced++; } });
 
@@ -836,6 +855,17 @@
         </div>
       </div></div>
 
+      <div class="pr-card">
+        <h3>By urgency</h3>
+        <p class="pr-fine">Click a band to filter everything below. This is the shape of what NRP needs funded, and when.</p>
+        <div class="pr-urg-strip big">
+          <button type="button" class="pr-urg-cell all${f === '' ? ' on' : ''}" data-cfilter="">
+            <b>${money(URGENCY.reduce((a, u) => a + urgTotals[u.key], 0))}</b><span>All work</span><small>everything quoted</small></button>
+          ${URGENCY.map(u => `<button type="button" class="pr-urg-cell u-${u.key}${f === u.key ? ' on' : ''}" data-cfilter="${u.key}">
+            <b>${money(urgTotals[u.key])}</b><span>${u.label}</span><small>${u.when}</small></button>`).join('')}
+        </div>
+      </div>
+
       <div class="pr-card pr-svc-note">
         <div><b>Recurring service pricing — kept separate</b>
           <small>Weekly maintenance contract value across ${servicePriced} priced propert${servicePriced === 1 ? 'y' : 'ies'}. Not included in any total above.</small></div>
@@ -843,7 +873,7 @@
       </div>`;
 
     if (!quoted.length) {
-      html += `<div class="pr-card"><p class="pr-fine">No quoted work yet. Add line items on a property in the Pool Review tab and they'll roll up here.</p></div>`;
+      html += `<div class="pr-card"><p class="pr-fine">${f ? 'Nothing in this band yet.' : "No quoted work yet. Add line items on a property in the Pool Review tab and they'll roll up here."}</p></div>`;
       host.innerHTML = html; return;
     }
 
@@ -853,20 +883,21 @@
     for (const region of Object.keys(byRegion)) {
       const regTotal = byRegion[region].reduce((a, p) => a + quotedTotal(p.id), 0);
       html += `<div class="pr-cost-region"><span>${esc(region)}</span><span>${money(regTotal)}</span></div>`;
-      for (const p of byRegion[region].sort((a, b) => quotedTotal(b.id) - quotedTotal(a.id))) {
+      for (const p of byRegion[region].sort((a, b) => quotedTotal(b.id, f) - quotedTotal(a.id, f))) {
         const open = !!costOpen[p.id];
         html += `<details class="pr-cost-prop"${open ? ' open' : ''} data-cprop="${p.id}">
           <summary><span class="chev">›</span><span class="nm">${esc(p.name)}</span>
-            <span class="ct">${itemsFor(p.id).length} item${itemsFor(p.id).length === 1 ? '' : 's'}</span>
-            <span class="amt">${money(quotedTotal(p.id))}</span></summary><div class="pr-cost-body">`;
+            <span class="ct">${itemsFor(p.id, null, f).length} item${itemsFor(p.id, null, f).length === 1 ? '' : 's'}</span>
+            <span class="amt">${money(quotedTotal(p.id, f))}</span></summary><div class="pr-cost-body">`;
         for (const k of KINDS) {
-          const list = itemsFor(p.id, k.key); if (!list.length) continue;
+          const list = itemsFor(p.id, k.key, f); if (!list.length) continue;
           const kOpen = !!costOpen[p.id + ':' + k.key];
           html += `<details class="pr-cost-kind"${kOpen ? ' open' : ''} data-ckind="${p.id}:${k.key}">
             <summary><span class="chev">›</span><span class="nm">${k.label}</span>
-              <span class="ct">${list.length}</span><span class="amt">${money(kindTotal(p.id, k.key))}</span></summary>
-            <table class="pr-cost-items"><thead><tr><th>Part #</th><th>Name</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead><tbody>
+              <span class="ct">${list.length}</span><span class="amt">${money(kindTotal(p.id, k.key, f))}</span></summary>
+            <table class="pr-cost-items"><thead><tr><th>Part #</th><th>Name</th><th>When</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead><tbody>
             ${list.map(it => `<tr><td>${esc(it.part_no || '—')}</td><td>${esc(it.name || '—')}</td>
+              <td><span class="pr-pill u-${urgOf(it)}">${urgLabel(urgOf(it))}</span></td>
               <td>${esc(it.qty ?? 1)}</td><td>${money(num(it.unit_price) || 0)}</td><td>${money(lineTotal(it))}</td></tr>`).join('')}
             </tbody></table></details>`;
         }
@@ -887,15 +918,17 @@
   }, true);
 
   document.addEventListener('click', e => {
-    if (e.target && e.target.id === 'prCostCsv') exportLineItems();
+    if (e.target && e.target.id === 'prCostCsv') { exportLineItems(); return; }
+    const btn = e.target && e.target.closest && e.target.closest('[data-cfilter]');
+    if (btn) { costFilter = btn.dataset.cfilter || ''; renderCosts(); }
   });
 
   function exportLineItems() {
     const esc2 = v => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-    const head = ['Region', 'Property', 'Category', 'Part #', 'Name', 'Qty', 'Unit price', 'Line total'];
+    const head = ['Region', 'Property', 'Category', 'Urgency', 'Timeframe', 'Part #', 'Name', 'Qty', 'Unit price', 'Line total'];
     const rows = [];
     props.forEach(p => itemsFor(p.id).forEach(it => rows.push([
-      p.region || '', p.name, kindLabel(it.kind), it.part_no || '', it.name || '',
+      p.region || '', p.name, kindLabel(it.kind), urgLabel(urgOf(it)), urgWhen(urgOf(it)), it.part_no || '', it.name || '',
       it.qty ?? 1, num(it.unit_price) || 0, lineTotal(it)
     ].map(esc2).join(','))));
     if (!rows.length) { alert('No line items yet.'); return; }
@@ -987,6 +1020,20 @@
     const t = e.target;
     if (t.id === 'prFileIn') { enqueue([...t.files]); t.value = ''; return; }
     if (t.id === 'prUpCat') { uploadCat = t.value; return; }
+    if (t.dataset.li) {
+      const [id, field] = t.dataset.li.split('|');
+      queueLineItem(id, field, t.value);
+      const row = t.closest('.pr-li-row');
+      if (row) row.className = 'pr-li-row u-' + t.value;
+      const p = props.find(x => x.id === sel);
+      if (p) {
+        const strip = t.closest('.pr-card') && t.closest('.pr-card').querySelector('.pr-urg-strip');
+        if (strip) strip.querySelectorAll('.pr-urg-cell b').forEach((b, i) => {
+          b.textContent = money(quotedTotal(p.id, URGENCY[i].key));
+        });
+      }
+      return;
+    }
     if (t.dataset.ppick) {
       if (t.checked) picked.add(t.dataset.ppick); else picked.delete(t.dataset.ppick);
       renderPhotos(true); return;
