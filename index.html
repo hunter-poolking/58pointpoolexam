@@ -396,6 +396,19 @@
   #viewReview .pr-pgroup { margin-top: 14px; }
   #viewReview .pr-pgroup h4 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
   #viewReview .pr-pgroup h4 small { font-weight: 400; color: var(--pr-muted); }
+  #viewReview .pr-selbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+    justify-content: space-between; border: 1px solid var(--pr-border); border-radius: 10px;
+    padding: 9px 12px; margin: 10px 0 4px; font-size: 13px; }
+  #viewReview .pr-selbar.on { border-color: var(--pr-accent, #0f7ea3); }
+  #viewReview .pr-selcount { font-weight: 600; }
+  #viewReview .pr-selacts { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  #viewReview .pr-btn.danger { background: #c0392b; color: #fff; border-color: #c0392b; }
+  #viewReview .pr-btn.danger[disabled] { opacity: 0.6; cursor: default; }
+  #viewReview .pr-tile { position: relative; }
+  #viewReview .pr-tile.picked { outline: 2px solid var(--pr-accent, #0f7ea3); outline-offset: 1px; }
+  #viewReview .pr-pick { position: absolute; top: 6px; left: 6px; z-index: 2; background: rgba(255,255,255,0.92);
+    border-radius: 6px; padding: 3px 4px 1px; line-height: 1; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
+  #viewReview .pr-pick input { width: 17px; height: 17px; margin: 0; cursor: pointer; }
   #viewReview .pr-pgroup h4 small.pr-cur { background: var(--pr-muted); color: #fff; border-radius: 20px;
     padding: 2px 8px; font-size: 11px; margin-left: 4px; }
   #viewReview .pr-pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
@@ -479,7 +492,7 @@
 
   <div class="userbar">
     <span id="whoami"></span>
-    <span style="opacity:0.7;">· build 7</span>
+    <span style="opacity:0.7;">· build 8</span>
     <button type="button" id="signOutBtn">Sign out</button>
   </div>
 
@@ -1437,6 +1450,6 @@
   })();
 })();
 </script>
-<script src="./pool-review.js?v=7"></script>
+<script src="./pool-review.js?v=8"></script>
 </body>
 </html>

@@ -36,6 +36,8 @@
   let props = [], reviews = {}, inspections = [], rphotos = {};
   const pending = {}, timers = {}, inflight = {};
   const signed = {}, examPhotos = {}, uploads = [];
+  let picked = new Set();   // ids of review photos ticked for bulk delete
+  let bulkBusy = false;
   let sel = null, pbEdit = false, pbDraft = '', confirmDel = null, lb = null, lbList = [];
   let uploadCat = 'equipment_pad', activeUploads = 0;
   const ui = { region: '', q: '', cat: '', res: '', sort: 'order' };
@@ -412,7 +414,7 @@
     const y = window.scrollY; renderDetail(); window.scrollTo(0, y);
   }
   function selectProp(id) {
-    sel = id; pbEdit = false; confirmDel = null;
+    sel = id; pbEdit = false; confirmDel = null; picked = new Set();
     renderList(); renderDetail();
     if (window.matchMedia('(max-width: 820px)').matches) window.scrollTo(0, $('viewReview').offsetTop);
     loadDetailPhotos();
@@ -489,7 +491,19 @@
       .filter(g => g.photos.length);
     const mine = photosFor(sel), ups = uploads.filter(u => u.pid === sel);
     const total = mine.length + exGroups.reduce((n, g) => n + g.photos.length, 0);
-    let html = `<div class="pr-sumrow"><h3>Photos</h3><span class="pr-msg">${total ? `${total} photo${total > 1 ? 's' : ''}` : ''}</span></div>
+    const dupIds = duplicateIds(mine);
+    let html = `<div class="pr-sumrow"><h3>Photos</h3><span class="pr-msg">${total ? `${total} photo${total > 1 ? 's' : ''}` : ''}</span></div>`;
+    if (mine.length) {
+      html += `<div class="pr-selbar${picked.size ? ' on' : ''}">
+        <span class="pr-selcount">${picked.size ? `${picked.size} selected` : 'Select photos to remove several at once'}</span>
+        <span class="pr-selacts">
+          <button type="button" class="pr-lnk" data-selall="1">Select all ${mine.length}</button>
+          ${dupIds.length ? `<button type="button" class="pr-lnk" data-seldup="1">Select ${dupIds.length} duplicate${dupIds.length > 1 ? 's' : ''}</button>` : ''}
+          ${picked.size ? `<button type="button" class="pr-lnk" data-selnone="1">Clear</button>
+            <button type="button" class="pr-btn danger" data-seldel="1"${bulkBusy ? ' disabled' : ''}>${bulkBusy ? 'Deleting…' : `Delete ${picked.size}`}</button>` : ''}
+        </span></div>`;
+    }
+    html += `
       <div class="pr-drop" id="prDrop">
         <div><b>Drop photos here</b></div>
         <div class="pr-row2"><span>or</span><button type="button" class="pr-btn" id="prPick">Choose photos</button>
@@ -504,7 +518,9 @@
       html += `<div class="pr-pgroup"><h4>${esc(c.label)} <small>${ps.length}</small></h4><div class="pr-pgrid">`;
       for (const ph of ps) {
         const u = urlFor(ph.storage_path), idx = all.push({ url: u, cap: ph.caption, cat: c.label }) - 1;
-        html += `<figure class="pr-tile"><button type="button" class="pr-thumb" data-open="${idx}" aria-label="Open ${esc(ph.caption || c.label)}">${u ? `<img src="${esc(u)}" alt="${esc(ph.caption || c.label)}" loading="lazy">` : '<span class="pr-ov">Loading…</span>'}</button>
+        html += `<figure class="pr-tile${picked.has(ph.id) ? ' picked' : ''}">
+          <label class="pr-pick"><input type="checkbox" data-ppick="${ph.id}" ${picked.has(ph.id) ? 'checked' : ''} aria-label="Select this photo"></label>
+          <button type="button" class="pr-thumb" data-open="${idx}" aria-label="Open ${esc(ph.caption || c.label)}">${u ? `<img src="${esc(u)}" alt="${esc(ph.caption || c.label)}" loading="lazy">` : '<span class="pr-ov">Loading…</span>'}</button>
           <div class="pr-meta"><input data-pcap="${ph.id}" value="${esc(ph.caption || '')}" placeholder="Add a caption" aria-label="Caption">
           <select data-pcat="${ph.id}" aria-label="Photo category">${PHOTO_CATS.map(cc => `<option value="${cc.key}" ${cc.key === (ph.category_key || 'additional') ? 'selected' : ''}>${esc(cc.label)}</option>`).join('')}</select>
           <div class="pr-acts">${confirmDel === ph.id ? `<button type="button" class="pr-lnk danger" data-pdel-yes="${ph.id}">Yes, delete</button><button type="button" class="pr-lnk" data-pdel-no="1">Keep</button>` : `<button type="button" class="pr-lnk" data-pdel="${ph.id}">Delete</button>`}</div></div></figure>`;
@@ -586,6 +602,36 @@
       u.msg = /HEIC/.test(e.message || '') ? e.message : /exceed|too large|size/i.test(e.message || '') ? 'Photo is too large.' : 'Upload failed. Try again.';
     }
   }
+  // exact repeats within a property: same category, same file name, same byte size.
+  // The earliest copy of each group is kept, the rest are the ones offered for removal.
+  function duplicateIds(list) {
+    const seen = {}, dups = [];
+    list.slice().sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+      .forEach(r => {
+        const k = [r.category_key || 'additional', r.file_name || '', r.size_bytes == null ? '' : r.size_bytes].join('|');
+        if (seen[k]) dups.push(r.id); else seen[k] = true;
+      });
+    return dups;
+  }
+
+  async function deleteMany(ids) {
+    if (!ids.length || bulkBusy) return;
+    bulkBusy = true; renderPhotos(true);
+    let removed = 0, failed = 0;
+    for (let i = 0; i < ids.length; i += 50) {
+      const batch = ids.slice(i, i + 50);
+      const paths = batch.map(id => rphotos[id] && rphotos[id].storage_path).filter(Boolean);
+      setSync(`Deleting ${i + 1}–${Math.min(i + 50, ids.length)} of ${ids.length}…`);
+      if (paths.length) await sb.storage.from(BUCKET).remove(paths);
+      const del = await sb.from('pool_review_photos').delete().in('id', batch);
+      if (del.error) { failed += batch.length; }
+      else { batch.forEach(id => { delete rphotos[id]; picked.delete(id); }); removed += batch.length; }
+    }
+    bulkBusy = false;
+    setSync(failed ? `${removed} deleted, ${failed} could not be deleted.` : `${removed} photo${removed > 1 ? 's' : ''} deleted.`);
+    renderPhotos(true); renderList();
+  }
+
   async function deletePhoto(id) {
     confirmDel = null;
     const row = rphotos[id]; if (!row) return;
@@ -673,6 +719,14 @@
     }
     if (t.id === 'prPick') { const f = $('prFileIn'); if (f) f.click(); return; }
     const o = t.closest('[data-open]'); if (o) { openLb(Number(o.dataset.open)); return; }
+    if (t.dataset.selall) { photosFor(sel).forEach(r => picked.add(r.id)); renderPhotos(true); return; }
+    if (t.dataset.seldup) { duplicateIds(photosFor(sel)).forEach(id => picked.add(id)); renderPhotos(true); return; }
+    if (t.dataset.selnone) { picked.clear(); renderPhotos(true); return; }
+    if (t.dataset.seldel) {
+      const ids = [...picked];
+      if (ids.length && confirm(`Permanently delete ${ids.length} photo${ids.length > 1 ? 's' : ''} from this property? This can't be undone.`)) deleteMany(ids);
+      return;
+    }
     if (t.dataset.pdel) { confirmDel = t.dataset.pdel; renderPhotos(true); return; }
     if (t.dataset.pdelNo) { confirmDel = null; renderPhotos(true); return; }
     if (t.dataset.pdelYes) { deletePhoto(t.dataset.pdelYes); return; }
@@ -701,6 +755,10 @@
     const t = e.target;
     if (t.id === 'prFileIn') { enqueue([...t.files]); t.value = ''; return; }
     if (t.id === 'prUpCat') { uploadCat = t.value; return; }
+    if (t.dataset.ppick) {
+      if (t.checked) picked.add(t.dataset.ppick); else picked.delete(t.dataset.ppick);
+      renderPhotos(true); return;
+    }
     if (t.id === 'prExamSel') { queue(sel, { inspection_id: t.value || null }); await flush(sel); changed(true); loadDetailPhotos(); return; }
     if (t.dataset.pcat) {
       const id = t.dataset.pcat; rphotos[id] = { ...rphotos[id], category_key: t.value };
