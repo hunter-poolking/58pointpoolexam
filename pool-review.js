@@ -54,6 +54,7 @@
   let items = {}, itemsReady = false;   // quoted work line items, keyed by id
   let costOpen = {};                    // which rows are expanded on the cost report
   let costFilter = '';                  // '' | needed | recommended | future
+  const myWrites = new Set();           // line item ids we just saved, to ignore our own echo
   let picked = new Set();   // ids of review photos ticked for bulk delete
   let bulkBusy = false;
   let sel = null, pbEdit = false, pbDraft = '', confirmDel = null, lb = null, lbList = [];
@@ -248,10 +249,16 @@
         renderStats(); renderList(); if (sel === (payload.new || payload.old).property_id) softRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pool_review_line_items' }, payload => {
-        if (payload.eventType === 'DELETE') delete items[payload.old.id]; else items[payload.new.id] = payload.new;
-        const pid = (payload.new || payload.old).property_id;
-        if (sel === pid) softRefresh();
+        const row = payload.new || payload.old, id = row.id;
+        if (payload.eventType === 'DELETE') delete items[id]; else items[id] = payload.new;
         renderCosts();
+        // Our own echo, or the user is typing in this card: update the data but leave the
+        // DOM alone. Redrawing here is what was closing the dropdown mid-selection.
+        if (myWrites.has(id)) { myWrites.delete(id); return; }
+        if (sel !== row.property_id) return;
+        const focused = document.activeElement;
+        if (focused && focused.closest && focused.closest('.pr-li-row')) return;
+        softRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pool_review_photos' }, payload => {
         if (payload.eventType === 'DELETE') delete rphotos[payload.old.id]; else rphotos[payload.new.id] = payload.new;
@@ -506,14 +513,14 @@
     setSync('Saving…');
     const { data, error } = await sb.from('pool_review_line_items').insert(row).select().single();
     if (error) { setSync('Could not add the line item.'); return; }
-    items[data.id] = data;
+    items[data.id] = data; myWrites.add(data.id);
     setSync('All changes saved.');
     softRefresh(); renderCosts();
   }
 
   async function delLineItem(id) {
     const row = items[id]; if (!row) return;
-    delete items[id];
+    delete items[id]; myWrites.add(id);
     softRefresh(); renderCosts(); setSync('Saving…');
     const { error } = await sb.from('pool_review_line_items').delete().eq('id', id);
     if (error) { items[id] = row; softRefresh(); renderCosts(); setSync('Could not remove the line item.'); }
@@ -544,7 +551,9 @@
       const patch = { [field]: v,
         updated_by: session && session.user ? session.user.id : null,
         updated_by_email: session && session.user ? session.user.email : null };
+      myWrites.add(id);
       const { error } = await sb.from('pool_review_line_items').update(patch).eq('id', id);
+      if (error) myWrites.delete(id);
       setSync(error ? 'Could not save that line item.' : 'All changes saved.');
       renderCosts();
     }, 650);
@@ -1000,7 +1009,11 @@
   D.addEventListener('input', e => {
     const t = e.target;
     if (t.id === 'prPbIn') { pbDraft = t.value; return; }
-    if (t.dataset.li) { const [id, field] = t.dataset.li.split('|'); queueLineItem(id, field, t.value); return; }
+    if (t.dataset.li) {
+      if (t.tagName === 'SELECT') return;   // handled on 'change' instead
+      const [id, field] = t.dataset.li.split('|');
+      queueLineItem(id, field, t.value); return;
+    }
     if (t.dataset.f) {
       queue(sel, { [t.dataset.f]: t.value });
       if (t.dataset.f === 'price_3x' || t.dataset.f === 'price_2x') $('prYearly').textContent = money(yearly(review(sel)));

@@ -432,10 +432,14 @@
     border-left-color: var(--u); background: color-mix(in srgb, var(--u) 6%, transparent); }
   .pr-scope .pr-li-hdr { border-left: 3px solid transparent; padding-left: 7px; }
   .pr-scope select.pr-urg { font-size: 12.5px; padding: 7px 6px; }
-  .pr-scope .pr-li-row { grid-template-columns: 100px 1fr 150px 54px 100px 84px 26px; }
-  .pr-scope .pr-li-hdr { grid-template-columns: 100px 1fr 150px 54px 100px 84px 26px; }
+  .pr-scope .pr-li-row, .pr-scope .pr-li-hdr { grid-template-columns: 96px minmax(0,1fr) 148px 52px 116px 104px 26px; }
+  .pr-scope .pr-li-row > *, .pr-scope .pr-li-hdr > * { min-width: 0; }
   .pr-scope .pr-li-hdr span:nth-child(5) { text-align: left; }
   .pr-scope .pr-li-hdr span:nth-child(6) { text-align: right; }
+  /* the $ sign and its input share the cell instead of fighting over it */
+  .pr-scope .pr-money { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 3px; }
+  .pr-scope .pr-money input { width: 100%; min-width: 0; text-align: right; }
+  .pr-scope .pr-li-tot { overflow: hidden; text-overflow: ellipsis; }
 
   .pr-scope .pr-urg-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
   .pr-scope .pr-urg-strip.big { grid-template-columns: repeat(4, 1fr); margin-top: 12px; }
@@ -582,7 +586,7 @@
 
   <div class="userbar">
     <span id="whoami"></span>
-    <span style="opacity:0.7;">· build 10</span>
+    <span style="opacity:0.7;">· build 11</span>
     <button type="button" id="signOutBtn">Sign out</button>
   </div>
 
@@ -1543,6 +1547,6 @@
 </script>
 <div id="viewCosts" class="pr-scope hidden"></div>
 
-<script src="./pool-review.js?v=10"></script>
+<script src="./pool-review.js?v=11"></script>
 </body>
 </html>
