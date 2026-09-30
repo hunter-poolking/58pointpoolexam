@@ -875,11 +875,7 @@
         </div>
       </div>
 
-      <div class="pr-card pr-svc-note">
-        <div><b>Recurring service pricing — kept separate</b>
-          <small>Weekly maintenance contract value across ${servicePriced} priced propert${servicePriced === 1 ? 'y' : 'ies'}. Not included in any total above.</small></div>
-        <div class="pr-svc-amt">${money(serviceYear)}<small>per year</small></div>
-      </div>`;
+      ${serviceSection(serviceYear, servicePriced)}`;
 
     if (!quoted.length) {
       html += `<div class="pr-card"><p class="pr-fine">${f ? 'Nothing in this band yet.' : "No quoted work yet. Add line items on a property in the Pool Review tab and they'll roll up here."}</p></div>`;
@@ -918,6 +914,66 @@
     host.innerHTML = html;
   }
 
+  // Recurring weekly maintenance: its own section, never mixed into quoted-work totals.
+  function serviceSection(serviceYear, servicePriced) {
+    const sum3 = props.reduce((a, p) => a + (num(review(p.id).price_3x) || 0), 0);
+    const sum2 = props.reduce((a, p) => a + (num(review(p.id).price_2x) || 0), 0);
+    const unpriced = props.length - servicePriced;
+
+    let rows = '';
+    const byRegion = {};
+    props.forEach(p => { (byRegion[p.region || 'Other'] = byRegion[p.region || 'Other'] || []).push(p); });
+    for (const region of Object.keys(byRegion)) {
+      const list = byRegion[region];
+      const regYear = list.reduce((a, p) => a + (yearly(review(p.id)) || 0), 0);
+      rows += `<tr class="pr-svc-reg"><td>${esc(region)}</td><td></td><td></td><td>${money(regYear)}</td></tr>`;
+      for (const p of list) {
+        const r = review(p.id), y = yearly(r);
+        rows += `<tr${y == null ? ' class="pr-svc-none"' : ''}>
+          <td>${esc(p.name)}</td>
+          <td>${num(r.price_3x) == null ? '—' : money(num(r.price_3x))}</td>
+          <td>${num(r.price_2x) == null ? '—' : money(num(r.price_2x))}</td>
+          <td>${y == null ? 'Not priced' : money(y)}</td></tr>`;
+      }
+    }
+
+    return `<div class="pr-card">
+      <h3>Recurring service pricing <span class="pr-gt">${money(serviceYear)}/yr</span></h3>
+      <p class="pr-fine">The weekly maintenance contract. Entirely separate from quoted work — none of these
+      figures appear in any total above.</p>
+      <div class="pr-urg-strip big pr-svc-strip">
+        <div class="pr-urg-cell"><b>${money(sum3)}</b><span>April–October</span><small>per month, 3&times;/week, all properties</small></div>
+        <div class="pr-urg-cell"><b>${money(sum2)}</b><span>November–March</span><small>per month, 2&times;/week, all properties</small></div>
+        <div class="pr-urg-cell"><b>${money(serviceYear)}</b><span>Annual contract value</span><small>7 months at 3&times; plus 5 at 2&times;</small></div>
+        <div class="pr-urg-cell"><b>${servicePriced} / ${props.length}</b><span>Priced</span><small>${unpriced} still to quote</small></div>
+      </div>
+      <details class="pr-svc-sec"${servicePriced ? '' : ' open'}>
+        <summary><span class="chev">&rsaquo;</span> Per property</summary>
+        <table class="pr-svc-tbl">
+          <thead><tr><th>Property</th><th>Apr–Oct / mo</th><th>Nov–Mar / mo</th><th>Per year</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr><td>All properties</td><td>${money(sum3)}</td><td>${money(sum2)}</td><td>${money(serviceYear)}</td></tr></tfoot>
+        </table>
+        <button type="button" class="pr-li-add" id="prSvcCsv">Export service pricing CSV</button>
+      </details>
+    </div>`;
+  }
+
+  function exportServicePricing() {
+    const esc2 = v => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const head = ['Region', 'Property', 'Apr-Oct monthly (3x/wk)', 'Nov-Mar monthly (2x/wk)', 'Annual'];
+    const rows = props.map(p => {
+      const r = review(p.id);
+      return [p.region || '', p.name, num(r.price_3x) ?? '', num(r.price_2x) ?? '', yearly(r) ?? ''].map(esc2).join(',');
+    });
+    const blob = new Blob(['\ufeff' + head.map(esc2).join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'poolie-service-pricing-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
   // remember which rows the user opened so a live update doesn't collapse them
   document.addEventListener('toggle', e => {
     const d = e.target;
@@ -928,6 +984,7 @@
 
   document.addEventListener('click', e => {
     if (e.target && e.target.id === 'prCostCsv') { exportLineItems(); return; }
+    if (e.target && e.target.id === 'prSvcCsv') { exportServicePricing(); return; }
     const btn = e.target && e.target.closest && e.target.closest('[data-cfilter]');
     if (btn) { costFilter = btn.dataset.cfilter || ''; renderCosts(); }
   });
