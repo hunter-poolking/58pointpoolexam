@@ -33,6 +33,15 @@
   const SUMMER_MONTHS = 7, WINTER_MONTHS = 5;
   const CLIENT_NOTES = { 'NRP Group': 'Bid due October 2, 2026.' };
   const JSON_FIELDS = ['exam', 'chem_readings', 'exam_notes'];
+  // Note sections shown between Inspection result and the 58-point exam (columns on pool_reviews)
+  const NEEDS_SECTIONS = [
+    { field: 'overall_summary', id: 'prOverallSummary', title: 'Overall Summary',
+      placeholder: 'Overall condition at inspection and what the property needs' },
+    { field: 'immediate_needs', id: 'prImmediateNeeds', title: 'Immediate Needs — Required to Open or Remain Operational',
+      placeholder: 'Work required before the pool can open or stay open' },
+    { field: 'near_term_needs', id: 'prNearTermNeeds', title: 'Near-Term Needs — Budget Within 6-12 Months',
+      placeholder: 'Work to budget for over the next 6-12 months' },
+  ];
   // One-off quoted work. Recurring weekly service pricing is deliberately NOT part of this.
   const KINDS = [
     { key: 'service',    label: 'Service Items',    hint: 'One-off work to make the pool serviceable — drain & clean, algae treatment, filter media.' },
@@ -376,7 +385,7 @@
     $('viewReview').classList.toggle('pr-has-sel', !!sel);
     const el = $('prDetail');
     if (!sel) { el.innerHTML = `<div class="pr-card"><h3>Pick a property</h3><p class="pr-msg">Choose a property on the left to see its exam results, set a category, and enter pricing and needed work.</p></div>`; return; }
-    setTimeout(lockControls, 0);
+    setTimeout(() => { fitBoxes($('prDetail')); lockControls(); }, 0);
     const p = props.find(x => x.id === sel); if (!p) { sel = null; renderDetail(); return; }
     const r = review(p.id), v = examView(p), sc = examScore(v), rt = rating(sc), y = yearly(r);
     const openSecs = new Set([...el.querySelectorAll('details.pr-sec[open]')].map(x => x.dataset.key));
@@ -416,6 +425,14 @@
       <div class="pr-res" role="group" aria-label="Inspection result">
         ${RESULTS.map(([k, l]) => `<button type="button" data-res="${k}" aria-pressed="${r.inspection_result === k}"><i></i>${l}</button>`).join('')}
       </div>
+    </div>
+
+    <div class="pr-card pr-needs-card">
+      ${NEEDS_SECTIONS.map(s => `
+      <div class="pr-need">
+        <label class="pr-need-h" for="${s.id}">${esc(s.title)}</label>
+        <textarea class="pr-in pr-fit" id="${s.id}" data-f="${s.field}" data-fit="1" rows="2" placeholder="${esc(s.placeholder)}">${esc(r[s.field] || '')}</textarea>
+      </div>`).join('')}
     </div>
 
     <div class="pr-card">
@@ -600,6 +617,13 @@
       renderCosts();
     }, 650);
   }
+  // These boxes are as tall as their text: no scrollbar, each line on its own line.
+  function fitBoxes(root) {
+    (root || document).querySelectorAll('textarea[data-fit]').forEach(t => {
+      t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px';
+    });
+  }
+
   function softRefresh() {
     const a = document.activeElement, d = $('prDetail');
     if (a && d.contains(a) && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) {
@@ -660,6 +684,10 @@
       const { data, error } = await sb.from('pool_reviews').upsert(body, { onConflict: 'property_id' }).select().single();
       if (error) {
         pending[id] = { ...patch, ...(pending[id] || {}) };
+        if (/overall_summary|immediate_needs|near_term_needs/.test(error.message || '')) {
+          setSync('Couldn\'t save the note sections yet: the database step (supabase/pool_review_needs.sql) hasn\'t been run. Your typing is kept on this screen.');
+          return;
+        }
         setSync('Couldn\'t save: ' + error.message + '. Retrying…');
         clearTimeout(timers[id]); timers[id] = setTimeout(() => flush(id), 3000);
       } else {
@@ -854,6 +882,7 @@
     const chemIdx = CHEM_READING.map((h, i) => h ? i : -1).filter(i => i >= 0);
     const head = ['Property', 'Region', 'City', 'Address', 'Manager', 'Phone', 'Poolbrain', 'Inspection result', 'Category',
       'Exam date', 'Technician', 'Exam passed', 'Of', 'Caution', 'Failed', 'N/A', 'Rating', 'Summary',
+      'Overall Summary', 'Immediate Needs (required to open or remain operational)', 'Near-Term Needs (budget within 6-12 months)',
       '3x/week monthly (Apr-Oct)', '2x/week monthly (Nov-Mar)', 'Yearly', 'Repairs', 'Renovations', 'Maintenance', 'Review photos',
       ...chemIdx.map(i => SECTIONS[0].items[i] + (CHEM_UNITS[SECTIONS[0].items[i]] ? ` (${CHEM_UNITS[SECTIONS[0].items[i]]})` : ''))];
     const rows = [head];
@@ -861,7 +890,8 @@
       const r = review(p.id), v = examView(p), sc = examScore(v), rt = rating(sc);
       rows.push([p.name, p.region, p.city, p.address, p.manager, p.phone, r.poolbrain_url || '', resLabel(r.inspection_result), r.category ?? '',
         v.date, v.tech, sc.rated ? sc.p : '', TOTAL_POINTS, sc.rated ? sc.c : '', sc.rated ? sc.f : '', sc.rated ? sc.na : '', rt ? rt.label : '',
-        r.summary || '', num(r.price_3x) ?? '', num(r.price_2x) ?? '', yearly(r) ?? '', r.repairs || '', r.renovations || '', r.maintenance || '',
+        r.summary || '', r.overall_summary || '', r.immediate_needs || '', r.near_term_needs || '',
+        num(r.price_3x) ?? '', num(r.price_2x) ?? '', yearly(r) ?? '', r.repairs || '', r.renovations || '', r.maintenance || '',
         photoCount(p.id), ...chemIdx.map(i => v.readings[i] || '')]);
     }
     const blob = new Blob(['\ufeff' + rows.map(x => x.map(csvCell).join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -1114,6 +1144,7 @@
       queueLineItem(id, field, t.value); return;
     }
     if (t.dataset.f) {
+      if (t.dataset.fit) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
       queue(sel, { [t.dataset.f]: t.value });
 
       renderStats(); renderList(); return;

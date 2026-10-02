@@ -428,6 +428,13 @@
   body.pr-role-pending #tabLog,
   body.pr-role-pending #tabCosts { visibility: hidden; }
 
+  /* Pool Review: Overall Summary / Immediate Needs / Near-Term Needs (boxes grow to fit their text) */
+  .pr-scope .pr-needs-card { display: grid; gap: 18px; }
+  .pr-scope .pr-need-h { display: block; font-size: 15px; font-weight: 700; margin: 0 0 6px; }
+  .pr-scope .pr-need + .pr-need { padding-top: 16px; border-top: 1px solid var(--pr-line-2); }
+  .pr-scope textarea.pr-in.pr-fit { min-height: 0; resize: none; overflow: hidden; line-height: 1.5; padding: 9px 11px; white-space: pre-wrap; }
+  @media print { .pr-scope textarea.pr-in.pr-fit { border: 0; padding: 0; } }
+
   /* ---- read-only client view ---- */
   body.pr-readonly .pr-scope .pr-in[readonly],
   body.pr-readonly .pr-scope .pr-in:disabled { background: transparent; border-color: transparent;
@@ -624,7 +631,7 @@
 
   <div class="userbar">
     <span id="whoami"></span>
-    <span style="opacity:0.7;">· build 14</span>
+    <span style="opacity:0.7;">· build 16</span>
     <button type="button" id="signOutBtn">Sign out</button>
   </div>
 
@@ -1585,6 +1592,6 @@
 </script>
 <div id="viewCosts" class="pr-scope hidden"></div>
 
-<script src="./pool-review.js?v=14"></script>
+<script src="./pool-review.js?v=16"></script>
 </body>
 </html>
