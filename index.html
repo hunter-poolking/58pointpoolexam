@@ -423,6 +423,11 @@
   .pr-scope table.pr-cost-items td:nth-child(5) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .pr-scope .pr-cost-acts { margin-top: 14px; }
 
+  /* ---- role not yet resolved: show nothing but Pool Review ---- */
+  body.pr-role-pending #tabNew,
+  body.pr-role-pending #tabLog,
+  body.pr-role-pending #tabCosts { visibility: hidden; }
+
   /* ---- read-only client view ---- */
   body.pr-readonly .pr-scope .pr-in[readonly],
   body.pr-readonly .pr-scope .pr-in:disabled { background: transparent; border-color: transparent;
@@ -619,7 +624,7 @@
 
   <div class="userbar">
     <span id="whoami"></span>
-    <span style="opacity:0.7;">· build 13</span>
+    <span style="opacity:0.7;">· build 14</span>
     <button type="button" id="signOutBtn">Sign out</button>
   </div>
 
@@ -1580,6 +1585,6 @@
 </script>
 <div id="viewCosts" class="pr-scope hidden"></div>
 
-<script src="./pool-review.js?v=13"></script>
+<script src="./pool-review.js?v=14"></script>
 </body>
 </html>

@@ -6,6 +6,9 @@
 (function () {
   "use strict";
   const P = window.POOLIE;
+  // Until the role lookup comes back, show only the Pool Review tab. A client login must
+  // never see the rest of the app, not even for the moment before the answer arrives.
+  document.body.classList.add('pr-role-pending');
   if (!P) { console.error('Pool Review: window.POOLIE missing — load pool-review.js after the main script.'); return; }
   const { sb, BUCKET, $, escapeHtml: esc } = P;
 
@@ -55,6 +58,7 @@
   let costOpen = {};                    // which rows are expanded on the cost report
   let costFilter = '';                  // '' | needed | recommended | future
   let isViewer = false;                 // read-only client login (e.g. NRP)
+  let roleKnown = false;
   const myWrites = new Set();           // line item ids we just saved, to ignore our own echo
   let picked = new Set();   // ids of review photos ticked for bulk delete
   let bulkBusy = false;
@@ -251,6 +255,8 @@
       const { data } = await sb.from('app_roles').select('role').eq('user_id', uid).maybeSingle();
       isViewer = !!(data && data.role === 'viewer');
     } catch (e) { isViewer = false; }
+    roleKnown = true;
+    document.body.classList.remove('pr-role-pending');
     if (!isViewer) return;
     document.body.classList.add('pr-readonly');
     ['tabNew', 'tabLog', 'tabCosts'].forEach(id => { const el = $(id); if (el) el.classList.add('hidden'); });
@@ -1179,6 +1185,16 @@
   });
 
   window.addEventListener('poolie:inspection-saved', () => { loaded = false; });
+  (async () => {
+    const { data } = await sb.auth.getSession();
+    if (data && data.session) applyRole();
+    else document.body.classList.remove('pr-role-pending');
+  })();
+  sb.auth.onAuthStateChange((_e, s) => {
+    if (s) { if (!roleKnown) applyRole(); }
+    else { roleKnown = false; isViewer = false; document.body.classList.remove('pr-readonly'); }
+  });
+
   window.addEventListener('poolie:signed-out', () => {
     loaded = false; sel = null; props = []; reviews = {}; inspections = []; rphotos = {};
     if (channel) { sb.removeChannel(channel); channel = null; }
