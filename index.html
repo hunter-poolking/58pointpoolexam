@@ -482,6 +482,12 @@
   }
   .pr-scope .pr-in { width: 100%; background: var(--pr-panel); border: 1px solid var(--pr-line); border-radius: 8px; padding: 8px 10px; font-size: 15px; }
   .pr-scope textarea.pr-in { min-height: 84px; resize: vertical; line-height: 1.45; }
+  /* Pool Review: Overall Summary / Immediate Needs / Near-Term Needs (boxes grow to fit their text) */
+  #viewReview .pr-needs-card { display: grid; gap: 18px; }
+  #viewReview .pr-need-h { display: block; font-size: 15px; font-weight: 700; margin: 0 0 6px; }
+  #viewReview .pr-need + .pr-need { padding-top: 16px; border-top: 1px solid var(--pr-line-2); }
+  #viewReview textarea.pr-in.pr-fit { min-height: 0; resize: none; overflow: hidden; line-height: 1.5; padding: 9px 11px; white-space: pre-wrap; }
+  @media print { #viewReview textarea.pr-in.pr-fit { border: 0; padding: 0; } }
   .pr-scope .pr-in:focus { border-color: var(--pr-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pr-focus) 20%, transparent); }
   .pr-scope .pr-msg { font-size: 13px; color: var(--pr-muted); }
   .pr-scope .pr-msg.err { color: var(--pr-fail); }
@@ -605,7 +611,7 @@
 
   <div class="userbar">
     <span id="whoami"></span>
-    <span style="opacity:0.7;">· build 12</span>
+    <span style="opacity:0.7;">· build 13</span>
     <button type="button" id="signOutBtn">Sign out</button>
   </div>
 
@@ -1566,6 +1572,6 @@
 </script>
 <div id="viewCosts" class="pr-scope hidden"></div>
 
-<script src="./pool-review.js?v=12"></script>
+<script src="./pool-review.js?v=13"></script>
 </body>
 </html>
