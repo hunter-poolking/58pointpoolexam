@@ -30,23 +30,6 @@
   const SUMMER_MONTHS = 7, WINTER_MONTHS = 5;
   const CLIENT_NOTES = { 'NRP Group': 'Bid due October 2, 2026.' };
   const JSON_FIELDS = ['exam', 'chem_readings', 'exam_notes'];
-  // Note sections shown between Inspection result and the 58-point exam (columns on pool_reviews)
-  const NEEDS_SECTIONS = [
-    { field: 'overall_summary', id: 'prOverallSummary', title: 'Overall Summary',
-      placeholder: 'Overall condition at inspection and what the property needs' },
-    { field: 'immediate_needs', id: 'prImmediateNeeds', title: 'Immediate Needs \u2014 Required to Open or Remain Operational',
-      placeholder: '- Drain and clean\n- Filter media change\n- Estimated costs for above $' },
-    { field: 'near_term_needs', id: 'prNearTermNeeds', title: 'Near-Term Needs \u2014 Budget Within 6-12 Months',
-      placeholder: '- Repair shifting coping\n- Replace mastic' },
-  ];
-  // grow a notes box to fit its text (no inner scrollbar)
-  function fitBox(t) {
-    if (!t || !t.isConnected) return;
-    t.style.height = 'auto';
-    t.style.height = (t.scrollHeight + (t.offsetHeight - t.clientHeight)) + 'px';
-  }
-  const fitAll = root => (root || document).querySelectorAll('textarea[data-fit]').forEach(fitBox);
-  window.addEventListener('resize', () => fitAll($('prDetail')));
   // One-off quoted work. Recurring weekly service pricing is deliberately NOT part of this.
   const KINDS = [
     { key: 'service',    label: 'Service Items',    hint: 'One-off work to make the pool serviceable — drain & clean, algae treatment, filter media.' },
@@ -71,6 +54,7 @@
   let items = {}, itemsReady = false;   // quoted work line items, keyed by id
   let costOpen = {};                    // which rows are expanded on the cost report
   let costFilter = '';                  // '' | needed | recommended | future
+  let isViewer = false;                 // read-only client login (e.g. NRP)
   const myWrites = new Set();           // line item ids we just saved, to ignore our own echo
   let picked = new Set();   // ids of review photos ticked for bulk delete
   let bulkBusy = false;
@@ -105,6 +89,12 @@
     const out = { ...d, ...p };
     for (const k of JSON_FIELDS) out[k] = { ...(d[k] || {}), ...(p[k] || {}) };
     return out;
+  }
+  // In-season monthly rate: the single figure NRP budgets per property, per month.
+  function monthly(r) {
+    const a = num(r.price_3x), b = num(r.price_2x);
+    if (a == null && b == null) return null;
+    return a != null ? a : b;
   }
   function yearly(r) {
     const a = num(r.price_3x), b = num(r.price_2x);
@@ -238,10 +228,12 @@
       inspections = ins.data || [];
       loaded = true; loading = null;
       const clients = [...new Set(props.map(p => p.client).filter(Boolean))];
-      $('prTitle').textContent = clients.length === 1 ? `${clients[0]} pool review` : 'Pool review';
+      $('prTitle').textContent = clients.length === 1
+        ? `The ${String(clients[0]).replace(/^The\s+/i, '')} — Portfolio Review` : 'Portfolio Review';
       $('prSub').textContent = '58-point exam results, service pricing and needed work.' + (clients.length === 1 && CLIENT_NOTES[clients[0]] ? ' ' + CLIENT_NOTES[clients[0]] : '');
       const regions = [...new Set(props.map(p => p.region).filter(Boolean))];
       $('prRegions').innerHTML = ['', ...regions].map(r => `<button type="button" data-r="${esc(r)}" aria-pressed="${ui.region === r}">${esc(r || 'All')}</button>`).join('');
+      applyRole();
       loadLineItems();
       subscribe();
       setSync('Changes save automatically for everyone.');
@@ -249,6 +241,31 @@
     })();
     return loading;
   }
+  // Read-only client logins see the Pool Review tab only, with every control locked.
+  // The database enforces this independently; this just keeps the UI honest.
+  async function applyRole() {
+    try {
+      const { data: sd } = await sb.auth.getSession();
+      const uid = sd && sd.session && sd.session.user && sd.session.user.id;
+      if (!uid) return;
+      const { data } = await sb.from('app_roles').select('role').eq('user_id', uid).maybeSingle();
+      isViewer = !!(data && data.role === 'viewer');
+    } catch (e) { isViewer = false; }
+    if (!isViewer) return;
+    document.body.classList.add('pr-readonly');
+    ['tabNew', 'tabLog', 'tabCosts'].forEach(id => { const el = $(id); if (el) el.classList.add('hidden'); });
+    if (window.POOLIE && window.POOLIE.showTab) window.POOLIE.showTab('Review');
+    lockControls();
+  }
+
+  // Inputs are re-rendered constantly, so re-lock after every paint.
+  function lockControls() {
+    if (!isViewer) return;
+    document.querySelectorAll('.pr-scope input, .pr-scope textarea, .pr-scope select').forEach(el => {
+      if (el.type === 'text' || el.tagName === 'TEXTAREA') el.readOnly = true; else el.disabled = true;
+    });
+  }
+
   // Loaded separately so a missing table never blocks the rest of the review.
   async function loadLineItems() {
     const li = await fetchAll('pool_review_line_items', '*', 'id');
@@ -289,10 +306,10 @@
     let inspected = 0, priced = 0, total = 0, cats = 0;
     for (const p of props) {
       const r = review(p.id); if (examScore(examView(p)).rated > 0) inspected++;
-      const y = yearly(r); if (y != null) { priced++; total += y; }
+      const m = monthly(r); if (m != null) { priced++; total += m; }
       if (r.category != null) cats++;
     }
-    $('prStats').innerHTML = [[props.length, 'properties'], [inspected, 'inspected'], [cats, 'categorized'], [priced, 'priced'], [money(total), 'total yearly']]
+    $('prStats').innerHTML = [[props.length, 'properties'], [inspected, 'inspected'], [cats, 'categorized'], [priced, 'priced'], [money(total), 'total monthly']]
       .map(([b, s]) => `<div class="pr-stat"><b>${b}</b><span>${s}</span></div>`).join('');
   }
   function filtered() {
@@ -312,7 +329,7 @@
       order: x => x.i, name: x => x.p.name.toLowerCase(),
       cat: x => x.r.category == null ? big : x.r.category,
       score: x => { const s = examScore(examView(x.p)).pct; return s == null ? big : s; },
-      year: x => { const y = yearly(x.r); return y == null ? big : -y; },
+      year: x => { const y = monthly(x.r); return y == null ? big : -y; },
     }[ui.sort];
     rows.sort((a, b) => { const x = key(a), y = key(b); return x < y ? -1 : x > y ? 1 : a.i - b.i; });
     return rows;
@@ -328,11 +345,11 @@
         last = p.region;
         html += `<div class="pr-group-h"><span>${esc(last || 'Other')}</span><span>${rows.filter(x => x.p.region === last).length}</span></div>`;
       }
-      const sc = examScore(examView(p)), y = yearly(r), n = photoCount(p.id);
+      const sc = examScore(examView(p)), y = monthly(r), n = photoCount(p.id);
       html += `<button type="button" class="pr-row" data-id="${esc(p.id)}" aria-current="${sel === p.id}">
         <span class="pr-strip" style="background:${catColor(r.category)}"></span>
         <span><span class="pr-nm">${esc(p.name)}</span><span class="pr-sub">${r.inspection_result ? `<span class="pr-rtag ${r.inspection_result}">${resLabel(r.inspection_result)}</span>, ` : ''}${esc(p.city || '')}${r.category != null ? `, category ${r.category}` : ''}${n ? `, ${n} photo${n > 1 ? 's' : ''}` : ''}</span></span>
-        <span class="pr-rt"><b>${sc.rated ? `${sc.p}/${TOTAL_POINTS}` : 'No exam'}</b>${y != null ? money(y) + '/yr' : 'Not priced'}</span>
+        <span class="pr-rt"><b>${sc.rated ? `${sc.p}/${TOTAL_POINTS}` : 'No exam'}</b>${y != null ? money(y) + '/mo' : 'Not priced'}</span>
       </button>`;
     }
     el.innerHTML = html;
@@ -353,6 +370,7 @@
     $('viewReview').classList.toggle('pr-has-sel', !!sel);
     const el = $('prDetail');
     if (!sel) { el.innerHTML = `<div class="pr-card"><h3>Pick a property</h3><p class="pr-msg">Choose a property on the left to see its exam results, set a category, and enter pricing and needed work.</p></div>`; return; }
+    setTimeout(lockControls, 0);
     const p = props.find(x => x.id === sel); if (!p) { sel = null; renderDetail(); return; }
     const r = review(p.id), v = examView(p), sc = examScore(v), rt = rating(sc), y = yearly(r);
     const openSecs = new Set([...el.querySelectorAll('details.pr-sec[open]')].map(x => x.dataset.key));
@@ -392,14 +410,6 @@
       <div class="pr-res" role="group" aria-label="Inspection result">
         ${RESULTS.map(([k, l]) => `<button type="button" data-res="${k}" aria-pressed="${r.inspection_result === k}"><i></i>${l}</button>`).join('')}
       </div>
-    </div>
-
-    <div class="pr-card pr-needs-card">
-      ${NEEDS_SECTIONS.map(s => `
-      <div class="pr-need">
-        <label class="pr-need-h" for="${s.id}">${esc(s.title)}</label>
-        <textarea class="pr-in pr-fit" id="${s.id}" data-f="${s.field}" data-fit="1" rows="2" placeholder="${esc(s.placeholder)}">${esc(r[s.field] || '')}</textarea>
-      </div>`).join('')}
     </div>
 
     <div class="pr-card">
@@ -464,9 +474,7 @@
           <tr><td>April–October pool service, 3 visits per week</td><td>Monthly</td><td><span class="pr-money">$<input class="pr-in" inputmode="decimal" data-f="price_3x" aria-label="3 visits per week monthly price" value="${esc(r.price_3x ?? '')}" placeholder="0"></span></td></tr>
           <tr><td>November–March pool service, 2 visits per week</td><td>Monthly</td><td><span class="pr-money">$<input class="pr-in" inputmode="decimal" data-f="price_2x" aria-label="2 visits per week monthly price" value="${esc(r.price_2x ?? '')}" placeholder="0"></span></td></tr>
         </tbody>
-        <tfoot><tr><td>Yearly price</td><td>12 months</td><td class="pr-yr" id="prYearly">${money(y)}</td></tr></tfoot>
       </table></div>
-      <div class="pr-fine">Yearly price is 7 months at the 3x/week price plus 5 months at the 2x/week price.</div>
     </div>
 
     <div class="pr-card">
@@ -479,7 +487,6 @@
     </div>
 
     ${quotedCard(p)}`;
-    fitAll(el);
   }
 
   // ---------------------------------------------------------------- quoted work
@@ -530,6 +537,7 @@
   }
 
   async function addLineItem(pid, kind) {
+    if (isViewer) return;
     const row = {
       property_id: pid, kind: kind, part_no: '', name: '', qty: 1, unit_price: 0, urgency: 'needed',
       sort_order: itemsFor(pid, kind).length,
@@ -545,6 +553,7 @@
   }
 
   async function delLineItem(id) {
+    if (isViewer) return;
     const row = items[id]; if (!row) return;
     delete items[id]; myWrites.add(id);
     softRefresh(); renderCosts(); setSync('Saving…');
@@ -554,6 +563,7 @@
   }
 
   function queueLineItem(id, field, value) {
+    if (isViewer) return;
     const row = items[id]; if (!row) return;
     const v = (field === 'qty' || field === 'unit_price') ? (num(value) ?? 0) : value;
     items[id] = { ...row, [field]: v };
@@ -587,7 +597,7 @@
   function softRefresh() {
     const a = document.activeElement, d = $('prDetail');
     if (a && d.contains(a) && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) {
-      const yEl = $('prYearly'); if (yEl) yEl.textContent = money(yearly(review(sel)));
+
       const s = $('prSaved'); if (s) s.innerHTML = fmtSaved(review(sel));
       return;
     }
@@ -617,6 +627,7 @@
 
   // ---------------------------------------------------------------- saving
   function queue(id, patch) {
+    if (isViewer) return;
     const cur = pending[id] || (pending[id] = {});
     for (const k in patch) {
       if (JSON_FIELDS.includes(k)) cur[k] = { ...(cur[k] || {}), ...patch[k] };
@@ -643,10 +654,6 @@
       const { data, error } = await sb.from('pool_reviews').upsert(body, { onConflict: 'property_id' }).select().single();
       if (error) {
         pending[id] = { ...patch, ...(pending[id] || {}) };
-        if (/overall_summary|immediate_needs|near_term_needs/.test(error.message || '')) {
-          setSync('Couldn\'t save the new note sections yet: the database setup step (supabase/pool_review_needs.sql) hasn\'t been run. Your typing is kept on this screen.');
-          return;
-        }
         setSync('Couldn\'t save: ' + error.message + '. Retrying…');
         clearTimeout(timers[id]); timers[id] = setTimeout(() => flush(id), 3000);
       } else {
@@ -841,7 +848,6 @@
     const chemIdx = CHEM_READING.map((h, i) => h ? i : -1).filter(i => i >= 0);
     const head = ['Property', 'Region', 'City', 'Address', 'Manager', 'Phone', 'Poolbrain', 'Inspection result', 'Category',
       'Exam date', 'Technician', 'Exam passed', 'Of', 'Caution', 'Failed', 'N/A', 'Rating', 'Summary',
-      'Overall Summary', 'Immediate Needs (required to open or remain operational)', 'Near-Term Needs (budget within 6-12 months)',
       '3x/week monthly (Apr-Oct)', '2x/week monthly (Nov-Mar)', 'Yearly', 'Repairs', 'Renovations', 'Maintenance', 'Review photos',
       ...chemIdx.map(i => SECTIONS[0].items[i] + (CHEM_UNITS[SECTIONS[0].items[i]] ? ` (${CHEM_UNITS[SECTIONS[0].items[i]]})` : ''))];
     const rows = [head];
@@ -849,7 +855,7 @@
       const r = review(p.id), v = examView(p), sc = examScore(v), rt = rating(sc);
       rows.push([p.name, p.region, p.city, p.address, p.manager, p.phone, r.poolbrain_url || '', resLabel(r.inspection_result), r.category ?? '',
         v.date, v.tech, sc.rated ? sc.p : '', TOTAL_POINTS, sc.rated ? sc.c : '', sc.rated ? sc.f : '', sc.rated ? sc.na : '', rt ? rt.label : '',
-        r.summary || '', r.overall_summary || '', r.immediate_needs || '', r.near_term_needs || '', num(r.price_3x) ?? '', num(r.price_2x) ?? '', yearly(r) ?? '', r.repairs || '', r.renovations || '', r.maintenance || '',
+        r.summary || '', num(r.price_3x) ?? '', num(r.price_2x) ?? '', yearly(r) ?? '', r.repairs || '', r.renovations || '', r.maintenance || '',
         photoCount(p.id), ...chemIdx.map(i => v.readings[i] || '')]);
     }
     const blob = new Blob(['\ufeff' + rows.map(x => x.map(csvCell).join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -883,8 +889,8 @@
     const grand = totals.service + totals.repair + totals.renovation;
     const urgTotals = {};
     URGENCY.forEach(u => { urgTotals[u.key] = props.reduce((a, p) => a + quotedTotal(p.id, u.key), 0); });
-    let serviceYear = 0, servicePriced = 0;
-    props.forEach(p => { const y = yearly(review(p.id)); if (y != null) { serviceYear += y; servicePriced++; } });
+    let serviceMonthly = 0, servicePriced = 0;
+    props.forEach(p => { const m = monthly(review(p.id)); if (m != null) { serviceMonthly += m; servicePriced++; } });
 
     let html = `<div class="pr-top"><div class="pr-top-inner">
         <div><h1>Cost report</h1><p>One-off quoted work across every property. Recurring service pricing is tracked separately.</p></div>
@@ -906,7 +912,7 @@
         </div>
       </div>
 
-      ${serviceSection(serviceYear, servicePriced)}`;
+      ${serviceSection(serviceMonthly, servicePriced)}`;
 
     if (!quoted.length) {
       html += `<div class="pr-card"><p class="pr-fine">${f ? 'Nothing in this band yet.' : "No quoted work yet. Add line items on a property in the Pool Review tab and they'll roll up here."}</p></div>`;
@@ -946,7 +952,7 @@
   }
 
   // Recurring weekly maintenance: its own section, never mixed into quoted-work totals.
-  function serviceSection(serviceYear, servicePriced) {
+  function serviceSection(serviceMonthly, servicePriced) {
     const sum3 = props.reduce((a, p) => a + (num(review(p.id).price_3x) || 0), 0);
     const sum2 = props.reduce((a, p) => a + (num(review(p.id).price_2x) || 0), 0);
     const unpriced = props.length - servicePriced;
@@ -956,34 +962,33 @@
     props.forEach(p => { (byRegion[p.region || 'Other'] = byRegion[p.region || 'Other'] || []).push(p); });
     for (const region of Object.keys(byRegion)) {
       const list = byRegion[region];
-      const regYear = list.reduce((a, p) => a + (yearly(review(p.id)) || 0), 0);
-      rows += `<tr class="pr-svc-reg"><td>${esc(region)}</td><td></td><td></td><td>${money(regYear)}</td></tr>`;
+      const reg3 = list.reduce((a, p) => a + (num(review(p.id).price_3x) || 0), 0);
+      const reg2 = list.reduce((a, p) => a + (num(review(p.id).price_2x) || 0), 0);
+      rows += `<tr class="pr-svc-reg"><td>${esc(region)}</td><td>${money(reg3)}</td><td>${money(reg2)}</td></tr>`;
       for (const p of list) {
-        const r = review(p.id), y = yearly(r);
-        rows += `<tr${y == null ? ' class="pr-svc-none"' : ''}>
+        const r = review(p.id), m = monthly(r);
+        rows += `<tr${m == null ? ' class="pr-svc-none"' : ''}>
           <td>${esc(p.name)}</td>
-          <td>${num(r.price_3x) == null ? '—' : money(num(r.price_3x))}</td>
-          <td>${num(r.price_2x) == null ? '—' : money(num(r.price_2x))}</td>
-          <td>${y == null ? 'Not priced' : money(y)}</td></tr>`;
+          <td>${num(r.price_3x) == null ? (m == null ? 'Not priced' : '—') : money(num(r.price_3x))}</td>
+          <td>${num(r.price_2x) == null ? '—' : money(num(r.price_2x))}</td></tr>`;
       }
     }
 
     return `<div class="pr-card">
-      <h3>Recurring service pricing <span class="pr-gt">${money(serviceYear)}/yr</span></h3>
-      <p class="pr-fine">The weekly maintenance contract. Entirely separate from quoted work — none of these
-      figures appear in any total above.</p>
-      <div class="pr-urg-strip big pr-svc-strip">
+      <h3>Recurring service pricing <span class="pr-gt">${money(serviceMonthly)}/mo</span></h3>
+      <p class="pr-fine">The weekly maintenance contract, priced monthly. Entirely separate from quoted work —
+      none of these figures appear in any total above.</p>
+      <div class="pr-urg-strip pr-svc-strip">
         <div class="pr-urg-cell"><b>${money(sum3)}</b><span>April–October</span><small>per month, 3&times;/week, all properties</small></div>
         <div class="pr-urg-cell"><b>${money(sum2)}</b><span>November–March</span><small>per month, 2&times;/week, all properties</small></div>
-        <div class="pr-urg-cell"><b>${money(serviceYear)}</b><span>Annual contract value</span><small>7 months at 3&times; plus 5 at 2&times;</small></div>
         <div class="pr-urg-cell"><b>${servicePriced} / ${props.length}</b><span>Priced</span><small>${unpriced} still to quote</small></div>
       </div>
       <details class="pr-svc-sec"${servicePriced ? '' : ' open'}>
         <summary><span class="chev">&rsaquo;</span> Per property</summary>
         <table class="pr-svc-tbl">
-          <thead><tr><th>Property</th><th>Apr–Oct / mo</th><th>Nov–Mar / mo</th><th>Per year</th></tr></thead>
+          <thead><tr><th>Property</th><th>Apr–Oct / mo</th><th>Nov–Mar / mo</th></tr></thead>
           <tbody>${rows}</tbody>
-          <tfoot><tr><td>All properties</td><td>${money(sum3)}</td><td>${money(sum2)}</td><td>${money(serviceYear)}</td></tr></tfoot>
+          <tfoot><tr><td>All properties</td><td>${money(sum3)}</td><td>${money(sum2)}</td></tr></tfoot>
         </table>
         <button type="button" class="pr-li-add" id="prSvcCsv">Export service pricing CSV</button>
       </details>
@@ -992,10 +997,10 @@
 
   function exportServicePricing() {
     const esc2 = v => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-    const head = ['Region', 'Property', 'Apr-Oct monthly (3x/wk)', 'Nov-Mar monthly (2x/wk)', 'Annual'];
+    const head = ['Region', 'Property', 'Apr-Oct monthly (3x/wk)', 'Nov-Mar monthly (2x/wk)'];
     const rows = props.map(p => {
       const r = review(p.id);
-      return [p.region || '', p.name, num(r.price_3x) ?? '', num(r.price_2x) ?? '', yearly(r) ?? ''].map(esc2).join(',');
+      return [p.region || '', p.name, num(r.price_3x) ?? '', num(r.price_2x) ?? ''].map(esc2).join(',');
     });
     const blob = new Blob(['\ufeff' + head.map(esc2).join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
@@ -1102,10 +1107,9 @@
       const [id, field] = t.dataset.li.split('|');
       queueLineItem(id, field, t.value); return;
     }
-    if (t.dataset.fit) fitBox(t);
     if (t.dataset.f) {
       queue(sel, { [t.dataset.f]: t.value });
-      if (t.dataset.f === 'price_3x' || t.dataset.f === 'price_2x') $('prYearly').textContent = money(yearly(review(sel)));
+
       renderStats(); renderList(); return;
     }
     if (t.dataset.reading !== undefined) { queue(sel, { chem_readings: { [t.dataset.reading]: t.value.trim() } }); return; }

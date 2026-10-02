@@ -423,6 +423,20 @@
   .pr-scope table.pr-cost-items td:nth-child(5) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .pr-scope .pr-cost-acts { margin-top: 14px; }
 
+  /* ---- read-only client view ---- */
+  body.pr-readonly .pr-scope .pr-in[readonly],
+  body.pr-readonly .pr-scope .pr-in:disabled { background: transparent; border-color: transparent;
+    color: var(--pr-text); padding-left: 0; cursor: default; opacity: 1; }
+  body.pr-readonly .pr-scope .pr-li-add,
+  body.pr-readonly .pr-scope .pr-li-x,
+  body.pr-readonly .pr-scope .pr-drop,
+  body.pr-readonly .pr-scope .pr-selbar,
+  body.pr-readonly .pr-scope .pr-pick,
+  body.pr-readonly .pr-scope .pr-pdel,
+  body.pr-readonly .pr-scope [data-pdel],
+  body.pr-readonly .pr-scope .pr-pb-edit { display: none !important; }
+  body.pr-readonly .pr-scope .pr-money { grid-template-columns: auto auto; }
+
   /* ---- recurring service section ---- */
   .pr-scope .pr-svc-strip .pr-urg-cell { border-top-color: var(--pr-line); }
   .pr-scope details.pr-svc-sec { margin-top: 16px; border-top: 1px solid var(--pr-line-2); }
@@ -482,12 +496,6 @@
   }
   .pr-scope .pr-in { width: 100%; background: var(--pr-panel); border: 1px solid var(--pr-line); border-radius: 8px; padding: 8px 10px; font-size: 15px; }
   .pr-scope textarea.pr-in { min-height: 84px; resize: vertical; line-height: 1.45; }
-  /* Pool Review: Overall Summary / Immediate Needs / Near-Term Needs (boxes grow to fit their text) */
-  #viewReview .pr-needs-card { display: grid; gap: 18px; }
-  #viewReview .pr-need-h { display: block; font-size: 15px; font-weight: 700; margin: 0 0 6px; }
-  #viewReview .pr-need + .pr-need { padding-top: 16px; border-top: 1px solid var(--pr-line-2); }
-  #viewReview textarea.pr-in.pr-fit { min-height: 0; resize: none; overflow: hidden; line-height: 1.5; padding: 9px 11px; white-space: pre-wrap; }
-  @media print { #viewReview textarea.pr-in.pr-fit { border: 0; padding: 0; } }
   .pr-scope .pr-in:focus { border-color: var(--pr-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pr-focus) 20%, transparent); }
   .pr-scope .pr-msg { font-size: 13px; color: var(--pr-muted); }
   .pr-scope .pr-msg.err { color: var(--pr-fail); }
