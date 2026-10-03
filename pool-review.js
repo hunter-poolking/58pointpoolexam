@@ -270,6 +270,9 @@
     document.body.classList.add('pr-readonly');
     ['tabNew', 'tabLog', 'tabCosts'].forEach(id => { const el = $(id); if (el) el.classList.add('hidden'); });
     if (window.POOLIE && window.POOLIE.showTab) window.POOLIE.showTab('Review');
+    // Staff reach the review by clicking its tab, which loads it. A viewer never sees that
+    // tab bar, so the load has to be kicked off here or they land on an empty page.
+    if (!loaded) load();
     lockControls();
   }
 
