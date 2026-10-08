@@ -68,6 +68,10 @@
   let costFilter = '';                  // '' | needed | recommended | future
   let isViewer = false;                 // read-only client login (e.g. NRP)
   let roleKnown = false;
+  let isAdmin = false;                  // only this account sees the client activity log
+  const viewSession = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const n = Math.random() * 16 | 0; return (c === 'x' ? n : (n & 0x3 | 0x8)).toString(16); });
   const myWrites = new Set();           // line item ids we just saved, to ignore our own echo
   let picked = new Set();   // ids of review photos ticked for bulk delete
   let bulkBusy = false;
@@ -263,6 +267,7 @@
       if (!uid) return;
       const { data } = await sb.from('app_roles').select('role').eq('user_id', uid).maybeSingle();
       isViewer = !!(data && data.role === 'viewer');
+      isAdmin = !!(data && data.role === 'admin');
     } catch (e) { isViewer = false; }
     roleKnown = true;
     document.body.classList.remove('pr-role-pending');
@@ -274,6 +279,20 @@
     // tab bar, so the load has to be kicked off here or they land on an empty page.
     if (!loaded) load();
     lockControls();
+  }
+
+  // Which properties a client account opens. Staff are never logged: this only runs
+  // when the role lookup came back 'viewer'.
+  async function logView(pid, kind) {
+    if (!isViewer) return;
+    try {
+      const { data: sd } = await sb.auth.getSession();
+      const u = sd && sd.session && sd.session.user; if (!u) return;
+      await sb.from('view_events').insert({
+        user_id: u.id, user_email: u.email || null, session_id: viewSession,
+        property_id: pid || null, event: kind || 'open',
+      });
+    } catch (e) { /* logging must never interrupt the client's browsing */ }
   }
 
   // Inputs are re-rendered constantly, so re-lock after every paint.
@@ -638,6 +657,7 @@
   }
   function selectProp(id) {
     sel = id; pbEdit = false; confirmDel = null; picked = new Set();
+    logView(id, 'open');
     renderList(); renderDetail();
     if (window.matchMedia('(max-width: 820px)').matches) window.scrollTo(0, $('viewReview').offsetTop);
     loadDetailPhotos();
@@ -910,6 +930,7 @@
   $('tabCosts').addEventListener('click', () => {
     P.showTab('Costs');
     if (!loaded) load().then(renderCosts); else renderCosts();
+    if (isAdmin && !activityLoaded) loadActivity();
   });
 
   // ---------------------------------------------------------------- cost report
@@ -951,7 +972,8 @@
         </div>
       </div>
 
-      ${serviceSection(serviceMonthly, servicePriced)}`;
+      ${serviceSection(serviceMonthly, servicePriced)}
+      ${activitySection()}`;
 
     if (!quoted.length) {
       html += `<div class="pr-card"><p class="pr-fine">${f ? 'Nothing in this band yet.' : "No quoted work yet. Add line items on a property in the Pool Review tab and they'll roll up here."}</p></div>`;
@@ -988,6 +1010,93 @@
     html += `</div><div class="pr-li-grand"><span>Total quoted work, all properties</span><b>${money(grand)}</b></div>`;
     html += `<div class="pr-cost-acts"><button type="button" class="pr-li-add" id="prCostCsv">Export line items CSV</button></div></div>`;
     host.innerHTML = html;
+  }
+
+  // Client activity: turns the raw open/end events into time spent per property.
+  let activity = null, activityLoaded = false;
+
+  async function loadActivity() {
+    if (!isAdmin) return;
+    const { data, error } = await sb.from('view_events').select('*').order('created_at', { ascending: true }).limit(5000);
+    activityLoaded = true;
+    activity = error ? [] : (data || []);
+    renderCosts();
+  }
+
+  // Time on a property = gap to that session's next event, ignoring gaps over 15 minutes
+  // (which mean they walked away rather than kept reading).
+  function activityRollup() {
+    const CAP = 15 * 60 * 1000;
+    const bySession = {};
+    (activity || []).forEach(e => { (bySession[e.session_id] = bySession[e.session_id] || []).push(e); });
+    const perProp = {}, sessions = {};
+    Object.values(bySession).forEach(evts => {
+      evts.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      const sid = evts[0].session_id;
+      sessions[sid] = { who: evts[0].user_email, start: evts[0].created_at,
+                        end: evts[evts.length - 1].created_at, opens: 0 };
+      for (let i = 0; i < evts.length; i++) {
+        const e = evts[i]; if (e.event !== 'open' || !e.property_id) continue;
+        sessions[sid].opens++;
+        const next = evts[i + 1];
+        const ms = next ? Math.min(new Date(next.created_at) - new Date(e.created_at), CAP) : 0;
+        const p = perProp[e.property_id] = perProp[e.property_id] || { opens: 0, ms: 0, last: e.created_at, who: {} };
+        p.opens++; p.ms += ms;
+        if (new Date(e.created_at) > new Date(p.last)) p.last = e.created_at;
+        p.who[e.user_email || 'unknown'] = true;
+      }
+    });
+    return { perProp, sessions };
+  }
+
+  const dur = ms => {
+    const s = Math.round(ms / 1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60);
+    return m < 60 ? m + 'm ' + (s % 60) + 's' : Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+  };
+
+  function activitySection() {
+    if (!isAdmin) return '';
+    if (!activityLoaded) return `<div class="pr-card"><h3>Client activity</h3><p class="pr-fine">Loading…</p></div>`;
+    if (!activity.length) {
+      return `<div class="pr-card"><h3>Client activity</h3>
+        <p class="pr-fine">Nothing logged yet. Rows appear here once a read-only account opens a property.
+        Staff browsing is never recorded.</p></div>`;
+    }
+    const { perProp, sessions } = activityRollup();
+    const sess = Object.values(sessions).sort((a, b) => new Date(b.start) - new Date(a.start));
+    const rows = Object.keys(perProp)
+      .map(pid => ({ pid: pid, p: props.find(x => x.id === pid), ...perProp[pid] }))
+      .filter(r => r.p)
+      .sort((a, b) => b.ms - a.ms);
+    const totalMs = rows.reduce((a, r) => a + r.ms, 0);
+    const when = t => new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+    return `<div class="pr-card">
+      <h3>Client activity <span class="pr-gt">${dur(totalMs)}</span></h3>
+      <p class="pr-fine">Which properties the read-only accounts have opened. ${sess.length} visit${sess.length === 1 ? '' : 's'},
+      most recent ${when(sess[0].start)}. Staff activity is not recorded.</p>
+      <details class="pr-svc-sec" open>
+        <summary><span class="chev">&rsaquo;</span> By property</summary>
+        <table class="pr-svc-tbl">
+          <thead><tr><th>Property</th><th>Opens</th><th>Time</th><th>Last seen</th></tr></thead>
+          <tbody>${rows.map(r => `<tr>
+            <td>${esc(r.p.name)}</td><td>${r.opens}</td><td>${dur(r.ms)}</td><td>${esc(when(r.last))}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </details>
+      <details class="pr-svc-sec">
+        <summary><span class="chev">&rsaquo;</span> By visit</summary>
+        <table class="pr-svc-tbl">
+          <thead><tr><th>Account</th><th>Started</th><th>Properties opened</th><th>Length</th></tr></thead>
+          <tbody>${sess.map(v => `<tr>
+            <td>${esc(v.who || 'unknown')}</td><td>${esc(when(v.start))}</td><td>${v.opens}</td>
+            <td>${dur(Math.min(new Date(v.end) - new Date(v.start), 4 * 60 * 60 * 1000))}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </details>
+    </div>`;
   }
 
   // Recurring weekly maintenance: its own section, never mixed into quoted-work totals.
@@ -1227,6 +1336,10 @@
   sb.auth.onAuthStateChange((_e, s) => {
     if (s) { if (!roleKnown) applyRole(); }
     else { roleKnown = false; isViewer = false; document.body.classList.remove('pr-readonly'); }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && isViewer && sel) logView(sel, 'end');
   });
 
   window.addEventListener('poolie:signed-out', () => {
